@@ -4,88 +4,498 @@ import { motion } from "framer-motion";
 import {
   FileText,
   Image,
-  FileSpreadsheet,
   Upload,
-  ArrowRight,
   Download,
   RefreshCw,
   Check,
   X,
   Loader2,
+  Merge,
+  Split,
+  RotateCw,
+  Trash2,
+  Hash,
+  ArrowUpDown,
+  Stamp,
+  Type,
+  Minimize2,
+  Maximize2,
+  Crop,
+  ImageIcon,
+  FileDigit,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-type ConversionFormat = {
+interface Tool {
   id: string;
   name: string;
-  extension: string;
+  description: string;
   icon: typeof FileText;
   color: string;
-  accepts: string[];
-};
+  accepts: string;
+  endpoint: string;
+  fields?: { name: string; label: string; type: string; placeholder?: string; options?: { value: string; label: string }[] }[];
+}
 
-const formats: ConversionFormat[] = [
-  { id: "pdf", name: "PDF", extension: ".pdf", icon: FileText, color: "bg-destructive", accepts: ["docx", "jpg", "png", "xlsx"] },
-  { id: "jpg", name: "JPG Image", extension: ".jpg", icon: Image, color: "bg-accent", accepts: ["pdf", "png", "webp"] },
-  { id: "png", name: "PNG Image", extension: ".png", icon: Image, color: "bg-chart-4", accepts: ["pdf", "jpg", "webp"] },
-  { id: "docx", name: "Word Document", extension: ".docx", icon: FileText, color: "bg-primary", accepts: ["pdf", "txt"] },
-  { id: "xlsx", name: "Excel Spreadsheet", extension: ".xlsx", icon: FileSpreadsheet, color: "bg-chart-4", accepts: ["csv", "pdf"] },
-  { id: "csv", name: "CSV", extension: ".csv", icon: FileSpreadsheet, color: "bg-chart-2", accepts: ["xlsx"] },
+const pdfTools: Tool[] = [
+  {
+    id: "merge",
+    name: "Merge PDFs",
+    description: "Combine multiple PDFs into one",
+    icon: Merge,
+    color: "bg-red-500",
+    accepts: ".pdf",
+    endpoint: "/api/file-ops/merge",
+    fields: [],
+  },
+  {
+    id: "split",
+    name: "Split PDF",
+    description: "Extract pages from a PDF",
+    icon: Split,
+    color: "bg-orange-500",
+    accepts: ".pdf",
+    endpoint: "/api/file-ops/split",
+    fields: [{ name: "pageRanges", label: "Page Ranges (e.g., 1-3, 5)", type: "text", placeholder: "1-3, 5-7" }],
+  },
+  {
+    id: "rotate",
+    name: "Rotate PDF",
+    description: "Rotate all pages in a PDF",
+    icon: RotateCw,
+    color: "bg-blue-500",
+    accepts: ".pdf",
+    endpoint: "/api/file-ops/rotate",
+    fields: [
+      {
+        name: "degrees",
+        label: "Rotation",
+        type: "select",
+        options: [
+          { value: "90", label: "90 degrees clockwise" },
+          { value: "180", label: "180 degrees" },
+          { value: "270", label: "90 degrees counter-clockwise" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "delete-pages",
+    name: "Delete Pages",
+    description: "Remove specific pages from PDF",
+    icon: Trash2,
+    color: "bg-red-600",
+    accepts: ".pdf",
+    endpoint: "/api/file-ops/delete-pages",
+    fields: [{ name: "pages", label: "Pages to Delete (comma-separated)", type: "text", placeholder: "1, 3, 5" }],
+  },
+  {
+    id: "add-page-numbers",
+    name: "Add Page Numbers",
+    description: "Number your PDF pages",
+    icon: Hash,
+    color: "bg-purple-500",
+    accepts: ".pdf",
+    endpoint: "/api/file-ops/add-page-numbers",
+    fields: [
+      {
+        name: "position",
+        label: "Position",
+        type: "select",
+        options: [
+          { value: "bottom", label: "Bottom" },
+          { value: "top", label: "Top" },
+        ],
+      },
+      { name: "format", label: "Format", type: "text", placeholder: "Page {n} of {total}" },
+    ],
+  },
+  {
+    id: "reorder-pages",
+    name: "Reorder Pages",
+    description: "Change the order of pages",
+    icon: ArrowUpDown,
+    color: "bg-indigo-500",
+    accepts: ".pdf",
+    endpoint: "/api/file-ops/reorder-pages",
+    fields: [{ name: "order", label: "New Order (comma-separated)", type: "text", placeholder: "3, 1, 2, 4" }],
+  },
+  {
+    id: "watermark",
+    name: "Add Watermark",
+    description: "Add text watermark to PDF",
+    icon: Stamp,
+    color: "bg-teal-500",
+    accepts: ".pdf",
+    endpoint: "/api/file-ops/watermark",
+    fields: [{ name: "watermarkText", label: "Watermark Text", type: "text", placeholder: "CONFIDENTIAL" }],
+  },
+  {
+    id: "header-footer",
+    name: "Add Header/Footer",
+    description: "Add header or footer text",
+    icon: Type,
+    color: "bg-cyan-500",
+    accepts: ".pdf",
+    endpoint: "/api/file-ops/add-header-footer",
+    fields: [
+      { name: "header", label: "Header Text", type: "text", placeholder: "Header text" },
+      { name: "footer", label: "Footer Text", type: "text", placeholder: "Footer text" },
+    ],
+  },
+  {
+    id: "compress",
+    name: "Compress PDF",
+    description: "Reduce PDF file size",
+    icon: Minimize2,
+    color: "bg-green-500",
+    accepts: ".pdf",
+    endpoint: "/api/file-ops/compress",
+    fields: [],
+  },
+  {
+    id: "extract-pages",
+    name: "Extract Pages",
+    description: "Extract specific pages",
+    icon: FileDigit,
+    color: "bg-amber-500",
+    accepts: ".pdf",
+    endpoint: "/api/file-ops/extract-pages",
+    fields: [{ name: "pages", label: "Pages to Extract (comma-separated)", type: "text", placeholder: "1, 3, 5-7" }],
+  },
+];
+
+const imageTools: Tool[] = [
+  {
+    id: "image-to-pdf",
+    name: "Image to PDF",
+    description: "Convert images to PDF",
+    icon: FileText,
+    color: "bg-rose-500",
+    accepts: ".jpg,.jpeg,.png,.webp",
+    endpoint: "/api/file-ops/image-to-pdf",
+    fields: [],
+  },
+  {
+    id: "compress-image",
+    name: "Compress Image",
+    description: "Reduce image file size",
+    icon: Minimize2,
+    color: "bg-emerald-500",
+    accepts: ".jpg,.jpeg,.png,.webp",
+    endpoint: "/api/file-ops/compress-image",
+    fields: [{ name: "quality", label: "Quality (%)", type: "text", placeholder: "80" }],
+  },
+  {
+    id: "resize-image",
+    name: "Resize Image",
+    description: "Change image dimensions",
+    icon: Maximize2,
+    color: "bg-sky-500",
+    accepts: ".jpg,.jpeg,.png,.webp",
+    endpoint: "/api/file-ops/resize-image",
+    fields: [
+      { name: "width", label: "Width (pixels)", type: "text", placeholder: "800" },
+      { name: "height", label: "Height (pixels, optional)", type: "text", placeholder: "600" },
+    ],
+  },
+  {
+    id: "rotate-image",
+    name: "Rotate Image",
+    description: "Rotate an image",
+    icon: RotateCw,
+    color: "bg-violet-500",
+    accepts: ".jpg,.jpeg,.png,.webp",
+    endpoint: "/api/file-ops/rotate-image",
+    fields: [
+      {
+        name: "degrees",
+        label: "Rotation",
+        type: "select",
+        options: [
+          { value: "90", label: "90 degrees" },
+          { value: "180", label: "180 degrees" },
+          { value: "270", label: "270 degrees" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "convert-format",
+    name: "Convert Format",
+    description: "Convert between image formats",
+    icon: RefreshCw,
+    color: "bg-fuchsia-500",
+    accepts: ".jpg,.jpeg,.png,.webp",
+    endpoint: "/api/file-ops/convert-image-format",
+    fields: [
+      {
+        name: "format",
+        label: "Target Format",
+        type: "select",
+        options: [
+          { value: "jpeg", label: "JPEG" },
+          { value: "png", label: "PNG" },
+          { value: "webp", label: "WebP" },
+        ],
+      },
+    ],
+  },
 ];
 
 interface ConversionJob {
   id: string;
   fileName: string;
-  sourceFormat: string;
-  targetFormat: string;
+  tool: string;
   status: "pending" | "processing" | "completed" | "failed";
   progress: number;
   downloadUrl?: string;
+  error?: string;
+}
+
+function ToolCard({ tool, onSelect }: { tool: Tool; onSelect: (tool: Tool) => void }) {
+  return (
+    <motion.div
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.98 }}
+      className="cursor-pointer"
+    >
+      <Card
+        className="h-full hover-elevate"
+        onClick={() => onSelect(tool)}
+        data-testid={`tool-card-${tool.id}`}
+      >
+        <CardContent className="flex flex-col items-center justify-center p-6 text-center">
+          <div className={`p-4 rounded-xl ${tool.color} mb-4`}>
+            <tool.icon className="h-8 w-8 text-white" />
+          </div>
+          <h3 className="font-semibold mb-1">{tool.name}</h3>
+          <p className="text-sm text-muted-foreground">{tool.description}</p>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+function ToolDialog({
+  tool,
+  open,
+  onOpenChange,
+  onProcess,
+  isProcessing,
+}: {
+  tool: Tool | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onProcess: (files: FileList, formData: Record<string, string>) => void;
+  isProcessing: boolean;
+}) {
+  const [files, setFiles] = useState<FileList | null>(null);
+  const [formData, setFormData] = useState<Record<string, string>>({});
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleProcess = () => {
+    if (files) {
+      onProcess(files, formData);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files.length > 0) {
+      setFiles(e.dataTransfer.files);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {tool && (
+              <>
+                <div className={`p-2 rounded-lg ${tool.color}`}>
+                  <tool.icon className="h-5 w-5 text-white" />
+                </div>
+                {tool.name}
+              </>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div
+            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+              isDragging ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground"
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => document.getElementById("tool-file-input")?.click()}
+          >
+            {files && files.length > 0 ? (
+              <div className="space-y-2">
+                {Array.from(files).map((file, idx) => (
+                  <div key={idx} className="flex items-center gap-2 justify-center">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">{file.name}</span>
+                  </div>
+                ))}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFiles(null);
+                  }}
+                >
+                  <X className="h-4 w-4 mr-1" /> Clear
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Upload className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
+                <p className="font-medium text-sm mb-1">Drop files here</p>
+                <p className="text-xs text-muted-foreground">or click to browse</p>
+              </>
+            )}
+            <input
+              id="tool-file-input"
+              type="file"
+              className="hidden"
+              accept={tool?.accepts}
+              multiple={tool?.id === "merge" || tool?.id === "images-to-pdf"}
+              onChange={(e) => setFiles(e.target.files)}
+              data-testid="input-tool-file"
+            />
+          </div>
+
+          {tool?.fields?.map((field) => (
+            <div key={field.name} className="space-y-2">
+              <Label htmlFor={field.name}>{field.label}</Label>
+              {field.type === "select" ? (
+                <Select
+                  value={formData[field.name] || ""}
+                  onValueChange={(val) => setFormData({ ...formData, [field.name]: val })}
+                >
+                  <SelectTrigger data-testid={`select-${field.name}`}>
+                    <SelectValue placeholder={`Select ${field.label.toLowerCase()}`} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {field.options?.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id={field.name}
+                  placeholder={field.placeholder}
+                  value={formData[field.name] || ""}
+                  onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
+                  data-testid={`input-${field.name}`}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleProcess}
+            disabled={!files || files.length === 0 || isProcessing}
+            className="gradient-bg text-white"
+            data-testid="button-process"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <Check className="h-4 w-4 mr-2" />
+                Process
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export default function ConvertPage() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [sourceFormat, setSourceFormat] = useState<string>("");
-  const [targetFormat, setTargetFormat] = useState<string>("");
+  const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [jobs, setJobs] = useState<ConversionJob[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
 
-  const convertMutation = useMutation({
-    mutationFn: async ({ file, target }: { file: File; target: string }) => {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("targetFormat", target);
+  const processMutation = useMutation({
+    mutationFn: async ({
+      tool,
+      files,
+      formData,
+    }: {
+      tool: Tool;
+      files: FileList;
+      formData: Record<string, string>;
+    }) => {
+      const body = new FormData();
 
-      const response = await fetch("/api/file-ops/convert", {
+      if (tool.id === "merge" && files.length > 1) {
+        Array.from(files).forEach((file) => body.append("files", file));
+      } else {
+        body.append("file", files[0]);
+      }
+
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value) body.append(key, value);
+      });
+
+      const response = await fetch(tool.endpoint, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
-        body: formData,
+        body,
       });
 
-      if (!response.ok) throw new Error("Conversion failed");
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Processing failed");
+      }
       return response.json();
     },
-    onMutate: () => {
-      if (!selectedFile) return;
+    onMutate: ({ tool, files }) => {
       const jobId = Date.now().toString();
       const newJob: ConversionJob = {
         id: jobId,
-        fileName: selectedFile.name,
-        sourceFormat,
-        targetFormat,
+        fileName: files.length > 1 ? `${files.length} files` : files[0].name,
+        tool: tool.name,
         status: "processing",
         progress: 0,
       };
@@ -95,11 +505,11 @@ export default function ConvertPage() {
         setJobs((prev) =>
           prev.map((job) =>
             job.id === jobId && job.status === "processing"
-              ? { ...job, progress: Math.min(job.progress + 10, 90) }
+              ? { ...job, progress: Math.min(job.progress + 15, 90) }
               : job
           )
         );
-      }, 500);
+      }, 300);
 
       return { jobId, interval };
     },
@@ -112,265 +522,142 @@ export default function ConvertPage() {
             : job
         )
       );
-      toast({ title: "Conversion completed!" });
-      setSelectedFile(null);
-      setSourceFormat("");
-      setTargetFormat("");
+      toast({ title: "Processing completed!" });
+      setDialogOpen(false);
+      setSelectedTool(null);
     },
-    onError: (_, __, context) => {
+    onError: (error, _, context) => {
       if (context?.interval) clearInterval(context.interval);
       setJobs((prev) =>
         prev.map((job) =>
-          job.id === context?.jobId ? { ...job, status: "failed", progress: 0 } : job
+          job.id === context?.jobId
+            ? { ...job, status: "failed", progress: 0, error: (error as Error).message }
+            : job
         )
       );
-      toast({ title: "Conversion failed", variant: "destructive" });
+      toast({ title: "Processing failed", description: (error as Error).message, variant: "destructive" });
     },
   });
 
-  const handleFileSelect = useCallback((file: File) => {
-    setSelectedFile(file);
-    const ext = file.name.split(".").pop()?.toLowerCase() || "";
-    const format = formats.find((f) => f.extension.slice(1) === ext);
-    if (format) {
-      setSourceFormat(format.id);
-    }
-  }, []);
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
+  const handleToolSelect = (tool: Tool) => {
+    setSelectedTool(tool);
+    setDialogOpen(true);
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files[0]) {
-      handleFileSelect(e.dataTransfer.files[0]);
+  const handleProcess = (files: FileList, formData: Record<string, string>) => {
+    if (selectedTool) {
+      processMutation.mutate({ tool: selectedTool, files, formData });
     }
   };
 
-  const availableTargets = sourceFormat
-    ? formats.filter((f) => f.accepts.includes(sourceFormat) && f.id !== sourceFormat)
-    : [];
-
-  const getFormatIcon = (formatId: string) => {
-    const format = formats.find((f) => f.id === formatId);
-    return format ? { Icon: format.icon, color: format.color } : { Icon: FileText, color: "bg-muted" };
+  const handleDownload = async (downloadUrl: string, fileName: string) => {
+    const token = localStorage.getItem("token");
+    const response = await fetch(downloadUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold mb-2">File Converter</h1>
+    <div className="p-6 space-y-6 max-w-6xl mx-auto">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold mb-2">PDF & Image Tools</h1>
         <p className="text-muted-foreground">
-          Convert your files between different formats with high quality
+          Professional document processing tools - merge, split, convert, and more
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <RefreshCw className="h-5 w-5 text-primary" />
-            Convert Files
-          </CardTitle>
-          <CardDescription>
-            Supported: PDF, JPG, PNG, DOCX, XLSX, CSV
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-              isDragging ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground"
-            }`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => document.getElementById("convert-file-input")?.click()}
-          >
-            {selectedFile ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="flex items-center justify-center gap-4"
-              >
-                <div className={`p-4 rounded-lg ${getFormatIcon(sourceFormat).color}`}>
-                  <FileText className="h-8 w-8 text-white" />
-                </div>
-                <div className="text-left">
-                  <p className="font-medium">{selectedFile.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {(selectedFile.size / 1024).toFixed(1)} KB
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedFile(null);
-                    setSourceFormat("");
-                    setTargetFormat("");
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </motion.div>
-            ) : (
-              <>
-                <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <p className="font-medium mb-1">Drop your file here</p>
-                <p className="text-sm text-muted-foreground">or click to browse</p>
-              </>
-            )}
-            <input
-              id="convert-file-input"
-              type="file"
-              className="hidden"
-              accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx,.csv"
-              onChange={(e) => {
-                if (e.target.files?.[0]) {
-                  handleFileSelect(e.target.files[0]);
-                }
-              }}
-              data-testid="input-convert-file"
-            />
+      <Tabs defaultValue="pdf" className="w-full">
+        <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-6">
+          <TabsTrigger value="pdf" className="flex items-center gap-2" data-testid="tab-pdf">
+            <FileText className="h-4 w-4" />
+            PDF Tools
+          </TabsTrigger>
+          <TabsTrigger value="image" className="flex items-center gap-2" data-testid="tab-image">
+            <Image className="h-4 w-4" />
+            Image Tools
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="pdf">
+          <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            {pdfTools.map((tool) => (
+              <ToolCard key={tool.id} tool={tool} onSelect={handleToolSelect} />
+            ))}
           </div>
+        </TabsContent>
 
-          {selectedFile && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-4 justify-center flex-wrap"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">From:</span>
-                <Select value={sourceFormat} onValueChange={setSourceFormat}>
-                  <SelectTrigger className="w-40" data-testid="select-source-format">
-                    <SelectValue placeholder="Source format" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {formats.map((format) => (
-                      <SelectItem key={format.id} value={format.id}>
-                        <div className="flex items-center gap-2">
-                          <format.icon className="h-4 w-4" />
-                          {format.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        <TabsContent value="image">
+          <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            {imageTools.map((tool) => (
+              <ToolCard key={tool.id} tool={tool} onSelect={handleToolSelect} />
+            ))}
+          </div>
+        </TabsContent>
+      </Tabs>
 
-              <ArrowRight className="h-5 w-5 text-muted-foreground" />
-
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">To:</span>
-                <Select
-                  value={targetFormat}
-                  onValueChange={setTargetFormat}
-                  disabled={!sourceFormat || availableTargets.length === 0}
-                >
-                  <SelectTrigger className="w-40" data-testid="select-target-format">
-                    <SelectValue placeholder="Target format" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableTargets.map((format) => (
-                      <SelectItem key={format.id} value={format.id}>
-                        <div className="flex items-center gap-2">
-                          <format.icon className="h-4 w-4" />
-                          {format.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <Button
-                onClick={() =>
-                  selectedFile && convertMutation.mutate({ file: selectedFile, target: targetFormat })
-                }
-                disabled={!targetFormat || convertMutation.isPending}
-                className="gradient-bg text-white"
-                data-testid="button-convert"
-              >
-                {convertMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Converting...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Convert
-                  </>
-                )}
-              </Button>
-            </motion.div>
-          )}
-        </CardContent>
-      </Card>
+      <ToolDialog
+        tool={selectedTool}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onProcess={handleProcess}
+        isProcessing={processMutation.isPending}
+      />
 
       {jobs.length > 0 && (
-        <Card>
+        <Card className="mt-8">
           <CardHeader>
-            <CardTitle>Conversion History</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              Processing History
+            </CardTitle>
+            <CardDescription>Your recent file operations</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {jobs.map((job) => (
               <motion.div
                 key={job.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
                 className="flex items-center gap-4 p-4 rounded-lg bg-muted/50"
-                data-testid={`job-${job.id}`}
+                data-testid={`job-row-${job.id}`}
               >
-                <div className={`p-2 rounded-lg ${getFormatIcon(job.sourceFormat).color}`}>
-                  <FileText className="h-5 w-5 text-white" />
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <FileText className="h-5 w-5 text-primary" />
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{job.fileName}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {job.sourceFormat.toUpperCase()} → {job.targetFormat.toUpperCase()}
-                  </p>
-                  {job.status === "processing" && (
-                    <Progress value={job.progress} className="h-1 mt-2" />
-                  )}
+                  <p className="text-xs text-muted-foreground">{job.tool}</p>
+                  {job.status === "processing" && <Progress value={job.progress} className="h-1 mt-2" />}
+                  {job.error && <p className="text-xs text-destructive mt-1">{job.error}</p>}
                 </div>
 
                 {job.status === "completed" && job.downloadUrl && (
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-full bg-accent">
-                      <Check className="h-3 w-3 text-white" />
-                    </div>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => {
-                        const link = document.createElement('a');
-                        link.href = job.downloadUrl!;
-                        link.download = job.fileName;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                      }}
-                      data-testid={`button-download-${job.id}`}
-                    >
-                      <Download className="h-4 w-4 mr-1" />
-                      Download
-                    </Button>
-                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => handleDownload(job.downloadUrl!, `processed-${job.fileName}`)}
+                    data-testid={`button-download-${job.id}`}
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Download
+                  </Button>
                 )}
 
-                {job.status === "processing" && (
-                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                {job.status === "processing" && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
+
+                {job.status === "completed" && (
+                  <div className="p-1.5 rounded-full bg-green-500">
+                    <Check className="h-3 w-3 text-white" />
+                  </div>
                 )}
 
                 {job.status === "failed" && (
@@ -383,32 +670,6 @@ export default function ConvertPage() {
           </CardContent>
         </Card>
       )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Supported Conversions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {formats.map((format) => (
-              <div
-                key={format.id}
-                className="flex items-center gap-3 p-3 rounded-lg bg-muted/30"
-              >
-                <div className={`p-2 rounded-lg ${format.color}`}>
-                  <format.icon className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <p className="font-medium text-sm">{format.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Can convert to: {format.accepts.join(", ").toUpperCase()}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

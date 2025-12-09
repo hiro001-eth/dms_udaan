@@ -188,6 +188,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(safeUsers);
   });
 
+  app.get("/api/analytics/dashboard", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const analytics = await storage.getAnalyticsDashboard();
+      res.json(analytics);
+    } catch (error) {
+      console.error("Analytics error:", error);
+      res.status(500).json({ message: "Failed to load analytics" });
+    }
+  });
+
+  app.get("/api/search", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { q, mimeType, folderId } = req.query;
+      if (!q || typeof q !== 'string') {
+        return res.status(400).json({ message: "Search query required" });
+      }
+      const results = await storage.searchDocuments(q, { 
+        mimeType: mimeType as string | undefined,
+        folderId: folderId as string | undefined
+      });
+      res.json(results);
+    } catch (error) {
+      console.error("Search error:", error);
+      res.status(500).json({ message: "Search failed" });
+    }
+  });
+
+  app.get("/api/audit-logs", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { userId, action, limit } = req.query;
+      const logs = await storage.getAuditLogs({
+        userId: userId as string | undefined,
+        action: action as string | undefined,
+        limit: limit ? parseInt(limit as string) : 50,
+      });
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to load audit logs" });
+    }
+  });
+
   app.post("/api/users", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const data = insertUserSchema.parse(req.body);
@@ -826,6 +867,247 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Batch download error:", error);
       res.status(500).json({ message: "Batch download failed" });
+    }
+  });
+
+  app.post("/api/file-ops/delete-pages", authMiddleware, superAdminMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "No file provided" });
+      }
+
+      if (file.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "Only PDFs supported" });
+      }
+
+      const { pages } = req.body;
+      if (!pages) {
+        return res.status(400).json({ message: "Pages to delete required" });
+      }
+
+      const pagesToDelete = pages.split(",").map((p: string) => parseInt(p.trim()));
+      const outputPath = await fileProcessor.deletePages(file.path, pagesToDelete);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "DELETE",
+        entityType: "DOCUMENT",
+        metadata: { sourceFile: file.originalname, deletedPages: pagesToDelete },
+      });
+
+      const fileName = path.basename(outputPath);
+      res.json({
+        success: true,
+        downloadUrl: `/api/file-ops/download/${fileName}`,
+        fileName,
+      });
+    } catch (error) {
+      console.error("Delete pages error:", error);
+      res.status(500).json({ message: "Delete pages failed" });
+    }
+  });
+
+  app.post("/api/file-ops/add-page-numbers", authMiddleware, superAdminMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "No file provided" });
+      }
+
+      if (file.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "Only PDFs supported" });
+      }
+
+      const { position, format } = req.body;
+      const outputPath = await fileProcessor.addPageNumbers(
+        file.path, 
+        position || "bottom",
+        format || "Page {n} of {total}"
+      );
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "CONVERT",
+        entityType: "DOCUMENT",
+        metadata: { sourceFile: file.originalname, operation: "add-page-numbers" },
+      });
+
+      const fileName = path.basename(outputPath);
+      res.json({
+        success: true,
+        downloadUrl: `/api/file-ops/download/${fileName}`,
+        fileName,
+      });
+    } catch (error) {
+      console.error("Add page numbers error:", error);
+      res.status(500).json({ message: "Add page numbers failed" });
+    }
+  });
+
+  app.post("/api/file-ops/reorder-pages", authMiddleware, superAdminMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "No file provided" });
+      }
+
+      if (file.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "Only PDFs supported" });
+      }
+
+      const { order } = req.body;
+      if (!order) {
+        return res.status(400).json({ message: "Page order required" });
+      }
+
+      const newOrder = order.split(",").map((p: string) => parseInt(p.trim()));
+      const outputPath = await fileProcessor.reorderPages(file.path, newOrder);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "CONVERT",
+        entityType: "DOCUMENT",
+        metadata: { sourceFile: file.originalname, operation: "reorder-pages" },
+      });
+
+      const fileName = path.basename(outputPath);
+      res.json({
+        success: true,
+        downloadUrl: `/api/file-ops/download/${fileName}`,
+        fileName,
+      });
+    } catch (error) {
+      console.error("Reorder pages error:", error);
+      res.status(500).json({ message: "Reorder pages failed" });
+    }
+  });
+
+  app.post("/api/file-ops/add-header-footer", authMiddleware, superAdminMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "No file provided" });
+      }
+
+      if (file.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "Only PDFs supported" });
+      }
+
+      const { header, footer } = req.body;
+      if (!header && !footer) {
+        return res.status(400).json({ message: "Header or footer text required" });
+      }
+
+      const outputPath = await fileProcessor.addHeaderFooter(file.path, header, footer);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "CONVERT",
+        entityType: "DOCUMENT",
+        metadata: { sourceFile: file.originalname, operation: "add-header-footer" },
+      });
+
+      const fileName = path.basename(outputPath);
+      res.json({
+        success: true,
+        downloadUrl: `/api/file-ops/download/${fileName}`,
+        fileName,
+      });
+    } catch (error) {
+      console.error("Add header/footer error:", error);
+      res.status(500).json({ message: "Add header/footer failed" });
+    }
+  });
+
+  app.post("/api/file-ops/pdf-info", authMiddleware, superAdminMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "No file provided" });
+      }
+
+      if (file.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "Only PDFs supported" });
+      }
+
+      const info = await fileProcessor.getPdfInfo(file.path);
+      res.json(info);
+    } catch (error) {
+      console.error("PDF info error:", error);
+      res.status(500).json({ message: "Get PDF info failed" });
+    }
+  });
+
+  app.post("/api/file-ops/resize-image", authMiddleware, superAdminMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "No file provided" });
+      }
+
+      if (!file.mimetype.startsWith("image/")) {
+        return res.status(400).json({ message: "Only images supported" });
+      }
+
+      const { width, height } = req.body;
+      if (!width) {
+        return res.status(400).json({ message: "Width required" });
+      }
+
+      const outputPath = await fileProcessor.resizeImage(file.path, parseInt(width), height ? parseInt(height) : undefined);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "CONVERT",
+        entityType: "DOCUMENT",
+        metadata: { sourceFile: file.originalname, operation: "resize-image", width, height },
+      });
+
+      const fileName = path.basename(outputPath);
+      res.json({
+        success: true,
+        downloadUrl: `/api/file-ops/download/${fileName}`,
+        fileName,
+      });
+    } catch (error) {
+      console.error("Resize image error:", error);
+      res.status(500).json({ message: "Resize image failed" });
+    }
+  });
+
+  app.post("/api/file-ops/rotate-image", authMiddleware, superAdminMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "No file provided" });
+      }
+
+      if (!file.mimetype.startsWith("image/")) {
+        return res.status(400).json({ message: "Only images supported" });
+      }
+
+      const { degrees } = req.body;
+      const rotationDegrees = parseInt(degrees) || 90;
+
+      const outputPath = await fileProcessor.rotateImage(file.path, rotationDegrees);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "ROTATE",
+        entityType: "DOCUMENT",
+        metadata: { sourceFile: file.originalname, degrees: rotationDegrees },
+      });
+
+      const fileName = path.basename(outputPath);
+      res.json({
+        success: true,
+        downloadUrl: `/api/file-ops/download/${fileName}`,
+        fileName,
+      });
+    } catch (error) {
+      console.error("Rotate image error:", error);
+      res.status(500).json({ message: "Rotate image failed" });
     }
   });
 

@@ -354,6 +354,99 @@ export class DatabaseStorage implements IStorage {
       recentLogins: Number(loginCount?.count) || 0,
     };
   }
+
+  async getAnalyticsDashboard(): Promise<{
+    overview: { totalUsers: number; totalDocuments: number; totalFolders: number; storageUsedMB: number; activeShares: number };
+    activityLast7Days: { date: string; uploads: number; conversions: number; downloads: number }[];
+    topUsers: { id: string; username: string; actionsCount: number }[];
+    fileTypeDistribution: { mimeType: string; count: number }[];
+    recentActivity: AuditLog[];
+  }> {
+    const [userCount] = await db.select({ count: sql<number>`count(*)` }).from(users);
+    const [docCount] = await db.select({ count: sql<number>`count(*)` }).from(documents);
+    const [folderCount] = await db.select({ count: sql<number>`count(*)` }).from(folders);
+    const [storageSum] = await db.select({ sum: sql<number>`coalesce(sum(${documents.sizeBytes}), 0)` }).from(documents);
+    const [shareCount] = await db.select({ count: sql<number>`count(*)` }).from(shareCodes).where(eq(shareCodes.isActive, true));
+
+    const activityLast7Days: { date: string; uploads: number; conversions: number; downloads: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      const nextDate = new Date(date);
+      nextDate.setDate(nextDate.getDate() + 1);
+      
+      const [uploadCount] = await db.select({ count: sql<number>`count(*)` }).from(auditLogs)
+        .where(and(
+          eq(auditLogs.action, "UPLOAD"),
+          sql`${auditLogs.createdAt} >= ${date.toISOString()}`,
+          sql`${auditLogs.createdAt} < ${nextDate.toISOString()}`
+        ));
+      
+      const [convertCount] = await db.select({ count: sql<number>`count(*)` }).from(auditLogs)
+        .where(and(
+          eq(auditLogs.action, "CONVERT"),
+          sql`${auditLogs.createdAt} >= ${date.toISOString()}`,
+          sql`${auditLogs.createdAt} < ${nextDate.toISOString()}`
+        ));
+      
+      const [downloadCount] = await db.select({ count: sql<number>`count(*)` }).from(auditLogs)
+        .where(and(
+          eq(auditLogs.action, "DOWNLOAD"),
+          sql`${auditLogs.createdAt} >= ${date.toISOString()}`,
+          sql`${auditLogs.createdAt} < ${nextDate.toISOString()}`
+        ));
+      
+      activityLast7Days.push({
+        date: dateStr,
+        uploads: Number(uploadCount?.count) || 0,
+        conversions: Number(convertCount?.count) || 0,
+        downloads: Number(downloadCount?.count) || 0,
+      });
+    }
+
+    const recentActivity = await db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(10);
+
+    const fileTypeResults = await db.select({
+      mimeType: documents.mimeType,
+      count: sql<number>`count(*)`
+    }).from(documents).groupBy(documents.mimeType).orderBy(desc(sql`count(*)`)).limit(10);
+
+    return {
+      overview: {
+        totalUsers: Number(userCount?.count) || 0,
+        totalDocuments: Number(docCount?.count) || 0,
+        totalFolders: Number(folderCount?.count) || 0,
+        storageUsedMB: Math.round((Number(storageSum?.sum) || 0) / (1024 * 1024)),
+        activeShares: Number(shareCount?.count) || 0,
+      },
+      activityLast7Days,
+      topUsers: [],
+      fileTypeDistribution: fileTypeResults.map(r => ({ mimeType: r.mimeType, count: Number(r.count) })),
+      recentActivity,
+    };
+  }
+
+  async searchDocuments(query: string, filters?: { mimeType?: string; folderId?: string }): Promise<Document[]> {
+    let whereConditions = [
+      or(
+        like(documents.name, `%${query}%`),
+        like(documents.originalName, `%${query}%`)
+      )
+    ];
+    
+    if (filters?.mimeType) {
+      whereConditions.push(eq(documents.mimeType, filters.mimeType));
+    }
+    if (filters?.folderId) {
+      whereConditions.push(eq(documents.folderId, filters.folderId));
+    }
+    
+    return db.select().from(documents)
+      .where(and(...whereConditions))
+      .orderBy(desc(documents.uploadedAt))
+      .limit(50);
+  }
 }
 
 export const storage = new DatabaseStorage();
