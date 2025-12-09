@@ -484,3 +484,229 @@ export async function getPdfInfo(pdfPath: string): Promise<{ pageCount: number; 
     pages,
   };
 }
+
+export interface BatchResult {
+  success: boolean;
+  filePath?: string;
+  error?: string;
+  originalFile: string;
+}
+
+export interface BatchProgress {
+  total: number;
+  completed: number;
+  failed: number;
+  results: BatchResult[];
+}
+
+export async function batchCompressImages(
+  imagePaths: string[],
+  quality: number = 80,
+  onProgress?: (progress: BatchProgress) => void
+): Promise<BatchProgress> {
+  const progress: BatchProgress = {
+    total: imagePaths.length,
+    completed: 0,
+    failed: 0,
+    results: [],
+  };
+
+  for (const imagePath of imagePaths) {
+    try {
+      const outputPath = await compressImage(imagePath, quality);
+      progress.completed++;
+      progress.results.push({
+        success: true,
+        filePath: outputPath,
+        originalFile: imagePath,
+      });
+    } catch (error) {
+      progress.failed++;
+      progress.results.push({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        originalFile: imagePath,
+      });
+    }
+    onProgress?.(progress);
+  }
+
+  return progress;
+}
+
+export async function batchConvertImages(
+  imagePaths: string[],
+  targetFormat: "jpeg" | "png" | "webp",
+  onProgress?: (progress: BatchProgress) => void
+): Promise<BatchProgress> {
+  const progress: BatchProgress = {
+    total: imagePaths.length,
+    completed: 0,
+    failed: 0,
+    results: [],
+  };
+
+  for (const imagePath of imagePaths) {
+    try {
+      const outputPath = await convertImageFormat(imagePath, targetFormat);
+      progress.completed++;
+      progress.results.push({
+        success: true,
+        filePath: outputPath,
+        originalFile: imagePath,
+      });
+    } catch (error) {
+      progress.failed++;
+      progress.results.push({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        originalFile: imagePath,
+      });
+    }
+    onProgress?.(progress);
+  }
+
+  return progress;
+}
+
+export async function batchResizeImages(
+  imagePaths: string[],
+  width: number,
+  height?: number,
+  onProgress?: (progress: BatchProgress) => void
+): Promise<BatchProgress> {
+  const progress: BatchProgress = {
+    total: imagePaths.length,
+    completed: 0,
+    failed: 0,
+    results: [],
+  };
+
+  for (const imagePath of imagePaths) {
+    try {
+      const outputPath = await resizeImage(imagePath, width, height);
+      progress.completed++;
+      progress.results.push({
+        success: true,
+        filePath: outputPath,
+        originalFile: imagePath,
+      });
+    } catch (error) {
+      progress.failed++;
+      progress.results.push({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        originalFile: imagePath,
+      });
+    }
+    onProgress?.(progress);
+  }
+
+  return progress;
+}
+
+export async function batchAddWatermark(
+  pdfPaths: string[],
+  watermarkText: string,
+  onProgress?: (progress: BatchProgress) => void
+): Promise<BatchProgress> {
+  const progress: BatchProgress = {
+    total: pdfPaths.length,
+    completed: 0,
+    failed: 0,
+    results: [],
+  };
+
+  for (const pdfPath of pdfPaths) {
+    try {
+      const outputPath = await addWatermark(pdfPath, watermarkText);
+      progress.completed++;
+      progress.results.push({
+        success: true,
+        filePath: outputPath,
+        originalFile: pdfPath,
+      });
+    } catch (error) {
+      progress.failed++;
+      progress.results.push({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        originalFile: pdfPath,
+      });
+    }
+    onProgress?.(progress);
+  }
+
+  return progress;
+}
+
+export async function batchRotatePdfs(
+  pdfPaths: string[],
+  rotationDegrees: number,
+  onProgress?: (progress: BatchProgress) => void
+): Promise<BatchProgress> {
+  const progress: BatchProgress = {
+    total: pdfPaths.length,
+    completed: 0,
+    failed: 0,
+    results: [],
+  };
+
+  for (const pdfPath of pdfPaths) {
+    try {
+      const outputPath = await rotatePdf(pdfPath, rotationDegrees);
+      progress.completed++;
+      progress.results.push({
+        success: true,
+        filePath: outputPath,
+        originalFile: pdfPath,
+      });
+    } catch (error) {
+      progress.failed++;
+      progress.results.push({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        originalFile: pdfPath,
+      });
+    }
+    onProgress?.(progress);
+  }
+
+  return progress;
+}
+
+export async function batchAddPageNumbers(
+  pdfPaths: string[],
+  position: "top" | "bottom" = "bottom",
+  format: string = "Page {n} of {total}",
+  onProgress?: (progress: BatchProgress) => void
+): Promise<BatchProgress> {
+  const progress: BatchProgress = {
+    total: pdfPaths.length,
+    completed: 0,
+    failed: 0,
+    results: [],
+  };
+
+  for (const pdfPath of pdfPaths) {
+    try {
+      const outputPath = await addPageNumbers(pdfPath, position, format);
+      progress.completed++;
+      progress.results.push({
+        success: true,
+        filePath: outputPath,
+        originalFile: pdfPath,
+      });
+    } catch (error) {
+      progress.failed++;
+      progress.results.push({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        originalFile: pdfPath,
+      });
+    }
+    onProgress?.(progress);
+  }
+
+  return progress;
+}

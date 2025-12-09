@@ -1111,5 +1111,271 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.post("/api/file-ops/batch-compress", authMiddleware, superAdminMiddleware, upload.array("files", 50), async (req: AuthRequest, res: Response) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        return res.status(400).json({ message: "No files provided" });
+      }
+
+      const quality = parseInt(req.body.quality) || 80;
+      const imagePaths = files.filter(f => f.mimetype.startsWith("image/")).map(f => f.path);
+
+      if (imagePaths.length === 0) {
+        return res.status(400).json({ message: "No valid image files provided" });
+      }
+
+      const result = await fileProcessor.batchCompressImages(imagePaths, quality);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "BATCH_COMPRESS",
+        entityType: "DOCUMENT",
+        metadata: { fileCount: files.length, quality },
+      });
+
+      const fileResults = result.results.map(r => ({
+        originalFile: path.basename(r.originalFile),
+        success: r.success,
+        downloadUrl: r.success && r.filePath ? `/api/file-ops/download/${path.basename(r.filePath)}` : undefined,
+        fileName: r.success && r.filePath ? path.basename(r.filePath) : undefined,
+        error: r.error,
+      }));
+
+      res.json({
+        success: result.failed === 0,
+        total: result.total,
+        completed: result.completed,
+        failed: result.failed,
+        files: fileResults,
+      });
+    } catch (error) {
+      console.error("Batch compress error:", error);
+      res.status(500).json({ message: "Batch compress failed" });
+    }
+  });
+
+  app.post("/api/file-ops/batch-convert", authMiddleware, superAdminMiddleware, upload.array("files", 50), async (req: AuthRequest, res: Response) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        return res.status(400).json({ message: "No files provided" });
+      }
+
+      const targetFormat = (req.body.format || "jpeg") as "jpeg" | "png" | "webp";
+      const imagePaths = files.filter(f => f.mimetype.startsWith("image/")).map(f => f.path);
+
+      if (imagePaths.length === 0) {
+        return res.status(400).json({ message: "No valid image files provided" });
+      }
+
+      const result = await fileProcessor.batchConvertImages(imagePaths, targetFormat);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "BATCH_CONVERT",
+        entityType: "DOCUMENT",
+        metadata: { fileCount: files.length, targetFormat },
+      });
+
+      const fileResults = result.results.map(r => ({
+        originalFile: path.basename(r.originalFile),
+        success: r.success,
+        downloadUrl: r.success && r.filePath ? `/api/file-ops/download/${path.basename(r.filePath)}` : undefined,
+        fileName: r.success && r.filePath ? path.basename(r.filePath) : undefined,
+        error: r.error,
+      }));
+
+      res.json({
+        success: result.failed === 0,
+        total: result.total,
+        completed: result.completed,
+        failed: result.failed,
+        files: fileResults,
+      });
+    } catch (error) {
+      console.error("Batch convert error:", error);
+      res.status(500).json({ message: "Batch convert failed" });
+    }
+  });
+
+  app.post("/api/file-ops/batch-resize", authMiddleware, superAdminMiddleware, upload.array("files", 50), async (req: AuthRequest, res: Response) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        return res.status(400).json({ message: "No files provided" });
+      }
+
+      const width = parseInt(req.body.width) || 800;
+      const height = req.body.height ? parseInt(req.body.height) : undefined;
+      const imagePaths = files.filter(f => f.mimetype.startsWith("image/")).map(f => f.path);
+
+      if (imagePaths.length === 0) {
+        return res.status(400).json({ message: "No valid image files provided" });
+      }
+
+      const result = await fileProcessor.batchResizeImages(imagePaths, width, height);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "BATCH_RESIZE",
+        entityType: "DOCUMENT",
+        metadata: { fileCount: files.length, width, height },
+      });
+
+      const fileResults = result.results.map(r => ({
+        originalFile: path.basename(r.originalFile),
+        success: r.success,
+        downloadUrl: r.success && r.filePath ? `/api/file-ops/download/${path.basename(r.filePath)}` : undefined,
+        fileName: r.success && r.filePath ? path.basename(r.filePath) : undefined,
+        error: r.error,
+      }));
+
+      res.json({
+        success: result.failed === 0,
+        total: result.total,
+        completed: result.completed,
+        failed: result.failed,
+        files: fileResults,
+      });
+    } catch (error) {
+      console.error("Batch resize error:", error);
+      res.status(500).json({ message: "Batch resize failed" });
+    }
+  });
+
+  app.post("/api/file-ops/batch-watermark", authMiddleware, superAdminMiddleware, upload.array("files", 50), async (req: AuthRequest, res: Response) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        return res.status(400).json({ message: "No files provided" });
+      }
+
+      const watermarkText = req.body.text || "CONFIDENTIAL";
+      const pdfPaths = files.filter(f => f.mimetype === "application/pdf").map(f => f.path);
+
+      if (pdfPaths.length === 0) {
+        return res.status(400).json({ message: "No valid PDF files provided" });
+      }
+
+      const result = await fileProcessor.batchAddWatermark(pdfPaths, watermarkText);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "BATCH_WATERMARK",
+        entityType: "DOCUMENT",
+        metadata: { fileCount: files.length, watermarkText },
+      });
+
+      const fileResults = result.results.map(r => ({
+        originalFile: path.basename(r.originalFile),
+        success: r.success,
+        downloadUrl: r.success && r.filePath ? `/api/file-ops/download/${path.basename(r.filePath)}` : undefined,
+        fileName: r.success && r.filePath ? path.basename(r.filePath) : undefined,
+        error: r.error,
+      }));
+
+      res.json({
+        success: result.failed === 0,
+        total: result.total,
+        completed: result.completed,
+        failed: result.failed,
+        files: fileResults,
+      });
+    } catch (error) {
+      console.error("Batch watermark error:", error);
+      res.status(500).json({ message: "Batch watermark failed" });
+    }
+  });
+
+  app.post("/api/file-ops/batch-rotate", authMiddleware, superAdminMiddleware, upload.array("files", 50), async (req: AuthRequest, res: Response) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        return res.status(400).json({ message: "No files provided" });
+      }
+
+      const degrees = parseInt(req.body.degrees) || 90;
+      const pdfPaths = files.filter(f => f.mimetype === "application/pdf").map(f => f.path);
+
+      if (pdfPaths.length === 0) {
+        return res.status(400).json({ message: "No valid PDF files provided" });
+      }
+
+      const result = await fileProcessor.batchRotatePdfs(pdfPaths, degrees);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "BATCH_ROTATE",
+        entityType: "DOCUMENT",
+        metadata: { fileCount: files.length, degrees },
+      });
+
+      const fileResults = result.results.map(r => ({
+        originalFile: path.basename(r.originalFile),
+        success: r.success,
+        downloadUrl: r.success && r.filePath ? `/api/file-ops/download/${path.basename(r.filePath)}` : undefined,
+        fileName: r.success && r.filePath ? path.basename(r.filePath) : undefined,
+        error: r.error,
+      }));
+
+      res.json({
+        success: result.failed === 0,
+        total: result.total,
+        completed: result.completed,
+        failed: result.failed,
+        files: fileResults,
+      });
+    } catch (error) {
+      console.error("Batch rotate error:", error);
+      res.status(500).json({ message: "Batch rotate failed" });
+    }
+  });
+
+  app.post("/api/file-ops/batch-page-numbers", authMiddleware, superAdminMiddleware, upload.array("files", 50), async (req: AuthRequest, res: Response) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        return res.status(400).json({ message: "No files provided" });
+      }
+
+      const position = (req.body.position || "bottom") as "top" | "bottom";
+      const format = req.body.format || "Page {n} of {total}";
+      const pdfPaths = files.filter(f => f.mimetype === "application/pdf").map(f => f.path);
+
+      if (pdfPaths.length === 0) {
+        return res.status(400).json({ message: "No valid PDF files provided" });
+      }
+
+      const result = await fileProcessor.batchAddPageNumbers(pdfPaths, position, format);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "BATCH_PAGE_NUMBERS",
+        entityType: "DOCUMENT",
+        metadata: { fileCount: files.length, position, format },
+      });
+
+      const fileResults = result.results.map(r => ({
+        originalFile: path.basename(r.originalFile),
+        success: r.success,
+        downloadUrl: r.success && r.filePath ? `/api/file-ops/download/${path.basename(r.filePath)}` : undefined,
+        fileName: r.success && r.filePath ? path.basename(r.filePath) : undefined,
+        error: r.error,
+      }));
+
+      res.json({
+        success: result.failed === 0,
+        total: result.total,
+        completed: result.completed,
+        failed: result.failed,
+        files: fileResults,
+      });
+    } catch (error) {
+      console.error("Batch page numbers error:", error);
+      res.status(500).json({ message: "Batch page numbers failed" });
+    }
+  });
+
   return httpServer;
 }
