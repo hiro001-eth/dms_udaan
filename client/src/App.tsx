@@ -17,6 +17,7 @@ import DocumentsPage from "@/pages/documents";
 import ConvertPage from "@/pages/convert";
 import SharedPage from "@/pages/shared";
 import AnalyticsPage from "@/pages/analytics";
+import SearchPage from "@/pages/search";
 import AdminDashboard from "@/pages/admin/index";
 import UserManagementPage from "@/pages/admin/users";
 import AuditLogsPage from "@/pages/admin/audit";
@@ -121,6 +122,9 @@ function AuthenticatedRoutes() {
         </Route>
         <Route path="/analytics">
           <AdminRoute component={AnalyticsPage} />
+        </Route>
+        <Route path="/search">
+          <AdminRoute component={SearchPage} />
         </Route>
         <Route path="/admin" nest>
           <Switch>

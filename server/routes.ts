@@ -200,13 +200,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/search", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const { q, mimeType, folderId } = req.query;
-      if (!q || typeof q !== 'string') {
-        return res.status(400).json({ message: "Search query required" });
-      }
-      const results = await storage.searchDocuments(q, { 
+      const { q, mimeType, folderId, minSize, maxSize, startDate, endDate, limit } = req.query;
+      const query = (q as string) || "";
+      
+      const results = await storage.searchDocuments(query, { 
         mimeType: mimeType as string | undefined,
-        folderId: folderId as string | undefined
+        folderId: folderId as string | undefined,
+        minSize: minSize ? parseInt(minSize as string) : undefined,
+        maxSize: maxSize ? parseInt(maxSize as string) : undefined,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+        limit: limit ? parseInt(limit as string) : 50,
       });
       res.json(results);
     } catch (error) {

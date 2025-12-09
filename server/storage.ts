@@ -427,13 +427,25 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async searchDocuments(query: string, filters?: { mimeType?: string; folderId?: string }): Promise<Document[]> {
-    let whereConditions = [
-      or(
-        like(documents.name, `%${query}%`),
-        like(documents.originalName, `%${query}%`)
-      )
-    ];
+  async searchDocuments(query: string, filters?: { 
+    mimeType?: string; 
+    folderId?: string;
+    minSize?: number;
+    maxSize?: number;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+  }): Promise<Document[]> {
+    let whereConditions: any[] = [];
+    
+    if (query && query.trim()) {
+      whereConditions.push(
+        or(
+          like(documents.name, `%${query}%`),
+          like(documents.originalName, `%${query}%`)
+        )
+      );
+    }
     
     if (filters?.mimeType) {
       whereConditions.push(eq(documents.mimeType, filters.mimeType));
@@ -441,11 +453,31 @@ export class DatabaseStorage implements IStorage {
     if (filters?.folderId) {
       whereConditions.push(eq(documents.folderId, filters.folderId));
     }
+    if (filters?.minSize) {
+      whereConditions.push(sql`${documents.sizeBytes} >= ${filters.minSize}`);
+    }
+    if (filters?.maxSize) {
+      whereConditions.push(sql`${documents.sizeBytes} <= ${filters.maxSize}`);
+    }
+    if (filters?.startDate) {
+      whereConditions.push(sql`${documents.uploadedAt} >= ${filters.startDate}`);
+    }
+    if (filters?.endDate) {
+      whereConditions.push(sql`${documents.uploadedAt} <= ${filters.endDate}`);
+    }
+    
+    const queryLimit = filters?.limit || 50;
+    
+    if (whereConditions.length === 0) {
+      return db.select().from(documents)
+        .orderBy(desc(documents.uploadedAt))
+        .limit(queryLimit);
+    }
     
     return db.select().from(documents)
       .where(and(...whereConditions))
       .orderBy(desc(documents.uploadedAt))
-      .limit(50);
+      .limit(queryLimit);
   }
 }
 

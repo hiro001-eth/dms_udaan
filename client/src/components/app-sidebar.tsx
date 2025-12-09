@@ -34,6 +34,7 @@ const userMenuItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER", "STAFF", "VIEWER"] },
   { title: "My Files", url: "/files", icon: FolderOpen, roles: ["SUPER_ADMIN"] },
   { title: "Documents", url: "/documents", icon: FileText, roles: ["SUPER_ADMIN"] },
+  { title: "Search", url: "/search", icon: Search, roles: ["SUPER_ADMIN"] },
   { title: "Convert Files", url: "/convert", icon: RefreshCw, roles: ["SUPER_ADMIN"] },
   { title: "Analytics", url: "/analytics", icon: BarChart3, roles: ["SUPER_ADMIN"] },
   { title: "Shared with Me", url: "/shared", icon: Share2, roles: ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER", "STAFF", "VIEWER"] },
