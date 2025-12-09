@@ -173,7 +173,17 @@ export default function UserManagementPage() {
         </div>
         <Button
           className="gradient-bg text-white"
-          onClick={() => setShowCreateDialog(true)}
+          onClick={() => {
+            form.reset({
+              email: "",
+              username: "",
+              password: "",
+              firstName: "",
+              lastName: "",
+              role: "STAFF",
+            });
+            setShowCreateDialog(true);
+          }}
           data-testid="button-create-user"
         >
           <Plus className="h-4 w-4 mr-2" />
@@ -351,7 +361,7 @@ export default function UserManagementPage() {
                     <FormItem>
                       <FormLabel>First Name</FormLabel>
                       <FormControl>
-                        <Input placeholder="John" data-testid="input-first-name" {...field} />
+                        <Input placeholder="John" autoComplete="off" data-testid="input-first-name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -364,7 +374,7 @@ export default function UserManagementPage() {
                     <FormItem>
                       <FormLabel>Last Name</FormLabel>
                       <FormControl>
-                        <Input placeholder="Doe" data-testid="input-last-name" {...field} />
+                        <Input placeholder="Doe" autoComplete="off" data-testid="input-last-name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -382,6 +392,7 @@ export default function UserManagementPage() {
                       <Input
                         type="email"
                         placeholder="john@example.com"
+                        autoComplete="off"
                         data-testid="input-email"
                         {...field}
                       />
@@ -398,7 +409,7 @@ export default function UserManagementPage() {
                   <FormItem>
                     <FormLabel>Username</FormLabel>
                     <FormControl>
-                      <Input placeholder="johndoe" data-testid="input-new-username" {...field} />
+                      <Input placeholder="johndoe" autoComplete="off" data-testid="input-new-username" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -415,6 +426,7 @@ export default function UserManagementPage() {
                       <Input
                         type="password"
                         placeholder="Minimum 6 characters"
+                        autoComplete="new-password"
                         data-testid="input-new-password"
                         {...field}
                       />
