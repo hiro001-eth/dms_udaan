@@ -9,7 +9,8 @@ export const documentStatusEnum = pgEnum("document_status", ["ACTIVE", "ARCHIVED
 export const auditActionEnum = pgEnum("audit_action", [
   "LOGIN", "LOGOUT", "UPLOAD", "DOWNLOAD", "UPDATE_METADATA", 
   "DELETE", "RESTORE", "PERMISSION_CHANGE", "CREATE_FOLDER", 
-  "DELETE_FOLDER", "SHARE", "CONVERT", "CREATE_USER", "UPDATE_USER"
+  "DELETE_FOLDER", "SHARE", "CONVERT", "CREATE_USER", "UPDATE_USER",
+  "MERGE", "SPLIT", "COMPRESS", "ROTATE", "WATERMARK", "BATCH_DOWNLOAD"
 ]);
 export const entityTypeEnum = pgEnum("entity_type", ["DOCUMENT", "FOLDER", "USER", "ORGANIZATION", "SHARE"]);
 

@@ -29,11 +29,11 @@ import { Button } from "@/components/ui/button";
 import logoUrl from "@assets/app_logo-removebg-preview_(1)_1765298325671.png";
 
 const userMenuItems = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "My Files", url: "/files", icon: FolderOpen },
-  { title: "Documents", url: "/documents", icon: FileText },
-  { title: "Convert Files", url: "/convert", icon: RefreshCw },
-  { title: "Shared with Me", url: "/shared", icon: Share2 },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER", "STAFF", "VIEWER"] },
+  { title: "My Files", url: "/files", icon: FolderOpen, roles: ["SUPER_ADMIN"] },
+  { title: "Documents", url: "/documents", icon: FileText, roles: ["SUPER_ADMIN"] },
+  { title: "Convert Files", url: "/convert", icon: RefreshCw, roles: ["SUPER_ADMIN"] },
+  { title: "Shared with Me", url: "/shared", icon: Share2, roles: ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER", "STAFF", "VIEWER"] },
 ];
 
 const adminMenuItems = [
@@ -51,7 +51,7 @@ export function AppSidebar() {
   const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "ORG_ADMIN" || user?.role === "MANAGER";
   const menuItems = location.startsWith("/admin") 
     ? adminMenuItems.filter(item => item.roles.includes(user?.role || ""))
-    : userMenuItems;
+    : userMenuItems.filter(item => item.roles.includes(user?.role || ""));
 
   const getInitials = (firstName: string, lastName: string) => {
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();

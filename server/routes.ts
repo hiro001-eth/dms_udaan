@@ -263,13 +263,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   });
 
-  app.get("/api/folders/:id?", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.get("/api/folders/:id?", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     const folderId = req.params.id === "root" ? null : req.params.id || null;
     const result = await storage.getFolderWithContents(folderId);
     res.json(result);
   });
 
-  app.post("/api/folders", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.post("/api/folders", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const data = insertFolderSchema.parse(req.body);
       const folder = await storage.createFolder({
@@ -295,7 +295,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.patch("/api/folders/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.patch("/api/folders/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const folder = await storage.updateFolder(id, req.body);
     if (!folder) {
@@ -304,7 +304,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(folder);
   });
 
-  app.delete("/api/folders/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.delete("/api/folders/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     await storage.deleteFolder(id);
     await storage.createAuditLog({
@@ -316,7 +316,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   });
 
-  app.get("/api/documents", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.get("/api/documents", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     const { limit, status, folderId } = req.query;
     const documents = await storage.getDocuments({
       limit: limit ? parseInt(limit as string) : undefined,
@@ -326,7 +326,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(documents);
   });
 
-  app.get("/api/documents/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.get("/api/documents/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     const doc = await storage.getDocument(req.params.id);
     if (!doc) {
       return res.status(404).json({ message: "Document not found" });
@@ -334,7 +334,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(doc);
   });
 
-  app.post("/api/documents/upload", authMiddleware, upload.array("files", 10), async (req: AuthRequest, res: Response) => {
+  app.post("/api/documents/upload", authMiddleware, superAdminMiddleware, upload.array("files", 10), async (req: AuthRequest, res: Response) => {
     try {
       const files = req.files as Express.Multer.File[];
       if (!files || files.length === 0) {
@@ -374,7 +374,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.patch("/api/documents/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.patch("/api/documents/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     const doc = await storage.updateDocument(req.params.id, req.body);
     if (!doc) {
       return res.status(404).json({ message: "Document not found" });
@@ -390,7 +390,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(doc);
   });
 
-  app.delete("/api/documents/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.delete("/api/documents/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     await storage.deleteDocument(req.params.id);
     await storage.createAuditLog({
       userId: req.user!.id,
@@ -401,7 +401,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   });
 
-  app.get("/api/documents/:id/download", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.get("/api/documents/:id/download", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     const doc = await storage.getDocument(req.params.id);
     if (!doc) {
       return res.status(404).json({ message: "Document not found" });
@@ -520,7 +520,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(activityData);
   });
 
-  app.post("/api/file-ops/convert", authMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+  app.post("/api/file-ops/convert", authMiddleware, superAdminMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
     try {
       const file = req.file;
       if (!file) {
@@ -563,7 +563,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/file-ops/merge", authMiddleware, upload.array("files", 20), async (req: AuthRequest, res: Response) => {
+  app.post("/api/file-ops/merge", authMiddleware, superAdminMiddleware, upload.array("files", 20), async (req: AuthRequest, res: Response) => {
     try {
       const files = req.files as Express.Multer.File[];
       if (!files || files.length < 2) {
@@ -606,7 +606,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/file-ops/split", authMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+  app.post("/api/file-ops/split", authMiddleware, superAdminMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
     try {
       const file = req.file;
       if (!file) {
@@ -659,7 +659,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/file-ops/compress", authMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+  app.post("/api/file-ops/compress", authMiddleware, superAdminMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
     try {
       const file = req.file;
       if (!file) {
@@ -696,7 +696,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/file-ops/rotate", authMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+  app.post("/api/file-ops/rotate", authMiddleware, superAdminMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
     try {
       const file = req.file;
       if (!file) {
@@ -731,7 +731,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/file-ops/watermark", authMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+  app.post("/api/file-ops/watermark", authMiddleware, superAdminMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
     try {
       const file = req.file;
       if (!file) {
@@ -768,7 +768,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.get("/api/file-ops/download/:fileName", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.get("/api/file-ops/download/:fileName", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { fileName } = req.params;
       const filePath = path.join(fileProcessor.getProcessedDir(), fileName);
@@ -789,7 +789,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/file-ops/batch-download", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.post("/api/file-ops/batch-download", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { documentIds } = req.body;
       if (!documentIds || !Array.isArray(documentIds) || documentIds.length === 0) {
