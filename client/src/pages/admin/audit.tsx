@@ -114,8 +114,8 @@ export default function AuditLogsPage() {
     return d.toLocaleDateString();
   };
 
-  const uniqueActions = [...new Set(logs?.map((l) => l.action) || [])];
-  const uniqueEntities = [...new Set(logs?.map((l) => l.entityType) || [])];
+  const uniqueActions = Array.from(new Set(logs?.map((l) => l.action) || []));
+  const uniqueEntities = Array.from(new Set(logs?.map((l) => l.entityType) || []));
 
   return (
     <div className="p-6 space-y-6">
@@ -254,8 +254,8 @@ export default function AuditLogsPage() {
 
                             {log.metadata && typeof log.metadata === "object" && (
                               <div className="mt-2 p-2 bg-muted/50 rounded text-xs font-mono overflow-hidden">
-                                {JSON.stringify(log.metadata, null, 2).slice(0, 100)}
-                                {JSON.stringify(log.metadata).length > 100 && "..."}
+                                {String(JSON.stringify(log.metadata, null, 2)).slice(0, 100)}
+                                {String(JSON.stringify(log.metadata)).length > 100 ? "..." : null}
                               </div>
                             )}
                           </div>

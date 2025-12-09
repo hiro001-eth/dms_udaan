@@ -173,11 +173,11 @@ export default function DashboardPage() {
   });
 
   const { data: recentDocs, isLoading: docsLoading } = useQuery<Document[]>({
-    queryKey: ["/api/documents", { limit: 5 }],
+    queryKey: ["/api/documents"],
   });
 
   const { data: recentActivity, isLoading: activityLoading } = useQuery<AuditLog[]>({
-    queryKey: ["/api/audit/logs", { limit: 8 }],
+    queryKey: ["/api/audit/logs"],
   });
 
   return (
@@ -309,7 +309,7 @@ export default function DashboardPage() {
                 <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p>No documents yet</p>
                 <Link href="/files">
-                  <Button variant="link" className="mt-2">Upload your first file</Button>
+                  <Button variant="ghost" className="mt-2">Upload your first file</Button>
                 </Link>
               </div>
             ) : (

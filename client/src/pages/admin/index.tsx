@@ -154,11 +154,11 @@ export default function AdminDashboard() {
   });
 
   const { data: recentUsers, isLoading: usersLoading } = useQuery<User[]>({
-    queryKey: ["/api/users", { limit: 5 }],
+    queryKey: ["/api/users"],
   });
 
   const { data: recentActivity, isLoading: activityLoading } = useQuery<AuditLog[]>({
-    queryKey: ["/api/audit/logs", { limit: 10 }],
+    queryKey: ["/api/audit/logs"],
   });
 
   return (
