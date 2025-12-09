@@ -1,0 +1,376 @@
+I’ll describe the full project I’d build as a manager, and then give you a **single detailed prompt** you can paste into any AI to recreate the same finished project — **without using Docker for local development**.
+
+---
+
+## 1. Product Overview
+
+- **Name**: Udaan Document Management System (Enterprise Edition)  
+- **Goal**: Central system for uploading, organizing, searching, securing, and auditing documents for an organization (or multiple organizations/tenants).  
+- **Target**: Internal company users (admin, managers, staff) managing large volumes of documents with strict access control and auditability.
+
+---
+
+## 2. Tech Stack (No Docker Locally)
+
+- **Monorepo root**: `udaan-dms/`
+- **Backend**:
+  - Node.js (>=18), TypeScript
+  - Framework: Express or Fastify (Express is fine)
+  - Database: PostgreSQL
+  - ORM: Prisma or TypeORM (I’d choose Prisma)
+  - Auth: JWT + refresh tokens
+- **Frontend**:
+  - React + TypeScript
+  - Vite for bundling
+  - UI: TailwindCSS + Headless UI or similar
+  - React Router for routing
+- **Local Dev**:
+  - No Docker. Use:
+    - `npm run dev:backend` (starts API on e.g. `http://localhost:4000`)
+    - `npm run dev:frontend` (starts UI on e.g. `http://localhost:5173`)
+  - PostgreSQL installed locally (or remote dev DB), configurable via `.env`.
+
+---
+
+## 3. Monorepo Structure
+
+- `udaan-dms/`
+  - `backend/`
+    - `src/`
+      - `config/`
+      - `modules/`
+        - `auth/`
+        - `users/`
+        - `organizations/`
+        - `documents/`
+        - `folders/`
+        - `tags/`
+        - `workflows/`
+        - `audit/`
+        - `search/`
+      - `shared/`
+      - `app.ts`
+      - `server.ts`
+    - `prisma/` (if Prisma)
+    - `package.json`
+  - `frontend/`
+    - `src/`
+      - `pages/`
+      - `components/`
+      - `features/`
+      - `lib/`
+    - `vite.config.ts`
+    - `package.json`
+  - `package.json` (root, with scripts that just call frontend/backend scripts)
+  - `README.md`
+
+---
+
+## 4. Core Features / Modules
+
+- **Organizations & Tenancy**
+  - Multiple organizations (tenants).
+  - Users belong to one organization.
+- **Users & Roles**
+  - Roles: `SUPER_ADMIN`, `ORG_ADMIN`, `MANAGER`, `STAFF`, `VIEWER`.
+  - Role-based access control for documents, folders, and actions.
+- **Documents**
+  - Upload (single, bulk).
+  - Metadata: title, description, tags, type, createdBy, organizationId, folderId, custom fields.
+  - Versioning (optional for Phase 2).
+  - Soft delete / archive.
+- **Folders**
+  - Hierarchical tree (folder with `parentFolderId`).
+- **Tags & Metadata**
+  - System tags + custom tags.
+  - Custom metadata fields configured per organization (Phase 2+).
+- **Search**
+  - Filter by title, tags, uploader, date range, folder, organization.
+  - Simple text search on title/description (no heavy full-text in Phase 1).
+- **Workflows (Phase 2)**
+  - Review/approval states (`DRAFT`, `UNDER_REVIEW`, `APPROVED`, `REJECTED`).
+- **Audit Logging**
+  - Actions tracked: login, upload, download, update metadata, delete, restore, permission changes.
+- **Security**
+  - JWT auth, refresh tokens.
+  - Password hashing (bcrypt).
+  - Per-tenant isolation via `organizationId` in all queries.
+  - Role-based middleware on routes.
+
+---
+
+## 5. Data Model (Main Tables)
+
+- **organizations**
+  - `id`, `name`, `code`, `created_at`
+- **users**
+  - `id`, `organization_id`, `email`, `password_hash`
+  - `first_name`, `last_name`, `role`
+  - `is_active`, `created_at`, `updated_at`
+- **folders**
+  - `id`, `organization_id`, `name`, `parent_folder_id`, `created_by`, `created_at`
+- **documents**
+  - `id`, `organization_id`, `folder_id`, `title`, `description`
+  - `file_path` (or storage URL), `mime_type`, `size_bytes`
+  - `uploaded_by`, `uploaded_at`, `status` (ACTIVE, ARCHIVED, DELETED)
+- **document_tags**
+  - `id`, `document_id`, `tag`
+- **document_versions** (optional Phase 2)
+  - `id`, `document_id`, `version_number`, `file_path`, `created_at`, `created_by`
+- **audit_logs**
+  - `id`, `organization_id`, `user_id`
+  - `action` (UPLOAD, DOWNLOAD, UPDATE_METADATA, DELETE, RESTORE, LOGIN, PERMISSION_CHANGE, etc.)
+  - `entity_type` (DOCUMENT, FOLDER, USER, ORG, etc.)
+  - `entity_id`
+  - `metadata` (JSON)
+  - `created_at`
+
+(Use Prisma schema or equivalent ORM mappings.)
+
+---
+
+## 6. Backend API Design (High Level)
+
+- **Auth**
+  - `POST /api/auth/register` (for initial super admin seed, then org admin only)
+  - `POST /api/auth/login`
+  - `POST /api/auth/refresh`
+  - `POST /api/auth/logout`
+- **Organizations**
+  - `GET /api/organizations` (super admin)
+  - `POST /api/organizations`
+  - `GET /api/organizations/:id`
+- **Users**
+  - `GET /api/users` (within org)
+  - `POST /api/users`
+  - `PATCH /api/users/:id`
+  - `DELETE /api/users/:id` (soft)
+- **Folders**
+  - `GET /api/folders/tree`
+  - `POST /api/folders`
+  - `PATCH /api/folders/:id`
+  - `DELETE /api/folders/:id`
+- **Documents**
+  - `GET /api/documents` (with query filters)
+  - `GET /api/documents/:id`
+  - `POST /api/documents` (multipart upload)
+  - `PATCH /api/documents/:id`
+  - `DELETE /api/documents/:id` (soft delete)
+  - `POST /api/documents/:id/restore`
+  - `GET /api/documents/:id/download`
+- **Search**
+  - `GET /api/search/documents` (q, tags, dateFrom, dateTo, folderId, etc.)
+- **Audit**
+  - `GET /api/audit/logs` (filter by user, action, date range)
+
+All routes protected by JWT auth except login/register; use org + role checks in middleware.
+
+---
+
+## 7. Frontend (Main Screens)
+
+- **Auth**
+  - Login page.
+  - (Optional) Forgot password stub.
+- **Layout**
+  - Top navbar: organization switch (if multi-org), user menu.
+  - Left sidebar: folder tree, quick filters (Recent, Favorites).
+  - Main content: document list, search, actions.
+- **Pages**
+  - Dashboard: summary (recent docs, activity).
+  - Document Library:
+    - Toolbar: search box, filter by tags/status/date/uploader, upload button.
+    - Table/card view of documents with pagination.
+  - Document Detail:
+    - Preview panel (basic), metadata, tags, versions (later), actions (download, move, archive).
+  - Folder Management:
+    - Tree view, create/rename/delete folders.
+  - Users & Roles (for admins):
+    - List users, assign roles, activate/deactivate.
+  - Audit Logs (admins):
+    - Filter by user, action, date; view recent activity.
+
+---
+
+## 8. Dev & Run (Without Docker)
+
+- **Root `package.json`**:
+  - `"scripts": { "dev:backend": "cd backend && npm run dev", "dev:frontend": "cd frontend && npm run dev", "dev": "npm-run-all --parallel dev:backend dev:frontend" }`
+  - (or similar, but **no Docker**.)
+- **Backend `package.json`**:
+  - `dev` script uses `ts-node-dev` or `nodemon` to start `src/server.ts`.
+- **Frontend `package.json`**:
+  - `dev` script uses `vite`.
+
+---
+
+## 9. The Detailed Prompt You Asked For
+
+Below is a single prompt you can copy–paste into another AI to rebuild the same project (you can adapt names/stack if you want):
+
+```text
+I want you to design and scaffold a full-stack web application called "Udaan Document Management System (Enterprise Edition)".
+
+High-level requirements:
+- It is a multi-tenant document management system for organizations.
+- Main features: organizations, users & roles, folders, documents with metadata, search, basic workflows (later), and full audit logging.
+- Local development MUST NOT use Docker. Everything should run with Node/npm/yarn/pnpm and a locally installed PostgreSQL (configurable via .env).
+
+Tech stack:
+- Monorepo root directory: udaan-dms/
+- Backend:
+  - Node.js (>=18) with TypeScript
+  - Express framework
+  - PostgreSQL database
+  - ORM: Prisma (preferred) or TypeORM if necessary
+  - JWT authentication with access + refresh tokens
+  - Password hashing using bcrypt
+- Frontend:
+  - React with TypeScript
+  - Vite for bundling
+  - TailwindCSS for styling
+  - React Router for routing
+
+Monorepo structure:
+- udaan-dms/
+  - backend/
+    - src/
+      - config/
+      - modules/
+        - auth/
+        - users/
+        - organizations/
+        - folders/
+        - documents/
+        - tags/
+        - workflows/
+        - audit/
+        - search/
+      - shared/
+      - app.ts
+      - server.ts
+    - prisma/
+    - package.json
+  - frontend/
+    - src/
+      - pages/
+      - components/
+      - features/
+      - lib/
+    - vite.config.ts
+    - package.json
+  - package.json (root)
+  - README.md
+
+Data model (design SQL or Prisma schema accordingly):
+- organizations:
+  - id (uuid), name, code, created_at
+- users:
+  - id (uuid), organization_id (fk), email (unique per org), password_hash
+  - first_name, last_name, role (SUPER_ADMIN, ORG_ADMIN, MANAGER, STAFF, VIEWER)
+  - is_active, created_at, updated_at
+- folders:
+  - id (uuid), organization_id (fk), name, parent_folder_id (nullable fk to folders.id)
+  - created_by (user fk), created_at
+- documents:
+  - id (uuid), organization_id (fk), folder_id (fk)
+  - title, description, file_path (or storage URL), mime_type, size_bytes
+  - uploaded_by (user fk), uploaded_at
+  - status (enum: ACTIVE, ARCHIVED, DELETED)
+- document_tags:
+  - id (uuid), document_id (fk), tag (string)
+- document_versions (Phase 2+):
+  - id (uuid), document_id (fk), version_number (int), file_path, created_at, created_by
+- audit_logs:
+  - id (uuid), organization_id (fk), user_id (fk)
+  - action (string/enum, e.g. LOGIN, UPLOAD, DOWNLOAD, UPDATE_METADATA, DELETE, RESTORE, PERMISSION_CHANGE)
+  - entity_type (string/enum, e.g. DOCUMENT, FOLDER, USER, ORG)
+  - entity_id (uuid reference)
+  - metadata (JSON)
+  - created_at
+
+Backend API design:
+- Authentication:
+  - POST /api/auth/register (for initial setup, then only org admins)
+  - POST /api/auth/login
+  - POST /api/auth/refresh
+  - POST /api/auth/logout
+- Organizations (super admin only):
+  - GET /api/organizations
+  - POST /api/organizations
+  - GET /api/organizations/:id
+- Users (scoped to organization):
+  - GET /api/users
+  - POST /api/users
+  - PATCH /api/users/:id
+  - DELETE /api/users/:id (soft delete or deactivate)
+- Folders:
+  - GET /api/folders/tree
+  - POST /api/folders
+  - PATCH /api/folders/:id
+  - DELETE /api/folders/:id
+- Documents:
+  - GET /api/documents (supports filters: q, tags, folderId, uploaderId, status, date range)
+  - GET /api/documents/:id
+  - POST /api/documents (multipart upload)
+  - PATCH /api/documents/:id (update metadata, folder, tags)
+  - DELETE /api/documents/:id (soft delete)
+  - POST /api/documents/:id/restore
+  - GET /api/documents/:id/download
+- Search:
+  - GET /api/search/documents with filters and basic text search on title/description
+- Audit:
+  - GET /api/audit/logs with filters (user, action, date range)
+
+Security & access:
+- Implement JWT middleware to protect all non-auth routes.
+- Every query is scoped by organization_id to enforce multi-tenancy.
+- Implement role-based middleware:
+  - Only ORG_ADMIN and MANAGER can manage users and critical operations.
+  - STAFF and VIEWER have read/write limitations as appropriate.
+
+Frontend requirements:
+- Use React + TypeScript, Vite, TailwindCSS.
+- Core pages:
+  - Login page
+  - Dashboard showing recent documents and recent activity (audit logs)
+  - Document Library:
+    - Folder tree sidebar
+    - Search bar and filters (tags, status, uploader, date range)
+    - Document list / table with pagination
+    - Upload button (single and multi-upload)
+  - Document Detail page:
+    - Show metadata, tags, and history (versions later)
+    - Actions: download, move to folder, change status (archive/restore), edit metadata
+  - Folder Management:
+    - Create, rename, delete folders in a hierarchical tree
+  - User Management (for admins):
+    - List users, create, update, assign role, activate/deactivate
+  - Audit Logs page:
+    - List recent actions with filters by user, action, and date
+
+Local development (NO Docker):
+- Backend:
+  - Provide npm scripts:
+    - "dev": start ts-node-dev or nodemon running src/server.ts
+  - Read DB config from .env (POSTGRES_URL or equivalent).
+- Frontend:
+  - Provide npm scripts:
+    - "dev": start Vite dev server on port 5173
+- Root package.json:
+  - scripts:
+    - "dev:backend": "cd backend && npm run dev"
+    - "dev:frontend": "cd frontend && npm run dev"
+    - "dev": run both dev:backend and dev:frontend in parallel (without Docker).
+
+Please:
+1. Scaffold the full folder structure and basic files.
+2. Define the Prisma schema for the data model.
+3. Implement basic versions of all backend routes with proper validation and error handling.
+4. Implement the frontend pages and routing skeleton, with simple UI and mock/api integration.
+5. Provide a clear README with instructions on how to set up .env, migrate the database, seed an initial super admin user, and run the dev servers (again: no Docker in dev).
+```
+
+---
+
+If you want, next we can customize this spec (e.g., different stack, smaller feature set, or single-tenant only) before you use it.

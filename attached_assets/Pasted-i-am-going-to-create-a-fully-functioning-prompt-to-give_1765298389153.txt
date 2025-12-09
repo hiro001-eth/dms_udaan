@@ -1,0 +1,33 @@
+i am going to create a fully functioning prompt to give windsurf but i just want you to enchance the prompt because you know everywell by what step including in the prompt ai will generate fully function things with being boring or crach the sturcture and all the template like how mnc make ai to work under it clear explaination and all desier things . also check my prompt deeply and analyze my project which i am going to create study nicly about it and give me all the feature which is missing out over there is the your suggested features is being added then it will be sugar on honey then means it will be good . so with out hasitage add it the missing features and missing things that need to be added for my project . also make sure it the these things suppose new technology can be intergrate it my software can be also acceptable . here is the raw prompt i created my self idea of my project : i am going to hire you my software development partner so let me introducte myself my name is harry working as cloud fare company since 3 years and also have along 10 years of experience in development in software and webapplication . 
+so hi windsurf you also contain top reasoning model to work on so i am testing your power so if i like it then i will definitly suggest to cloudfare to collabrate with you and your company . 
+
+here is the decription you need to build . 
+
+context : 
+	 building an software that runs smoothly in linux , windows and mac to it should be simply easy to use by non techic person in the office . there will not much maximum i guess 10 user at a time . but security should have topnotch . 
+	 
+project decription : udann data manage software so what is udaan ?? udaan is the conustancy working companies they need  a software operates to store the data in strucuter format . like now there is no software because you where not onboard rightnow so you have complete power to create from 0 to reach to until it finish . 
+
+what that software do : 
+
+there will be admin dashboard and user dashboard only by which admin create a login id (username and password ) and distrubuted to the user . 
+software will able to keep all the formats of data assign in strutcure way able to create folder and files with desire extension and it will be easy to change the format of the file (eg: pdf to jpg , jpg to pdf and all the extension exits in the world then from using software will be possible ) make sure these opration is the top most using things in the software the algorithm to changing it should be too perfect for the file changing it extnestion . and make things you need to add security features for it so that data or byts or bits wont get format or changes after the data is changed that means as like same bytes and bits of the quality and context wont change at all . 
+ and storing it into folder should be there like clinet data in the context of the file creating an folder and storing into the folder features should be there and acessing by others user should share with the 6 digits code the folder contain and it can operaates operation on it and saving then the folder update and show history like git lab and github code upload fereaturs option so that tracking will be easy . pdf edit featurs adding jpg into and convert it into pdf . 
+ 
+ tracking the user using time track by the admin . 
+ 
+ 
+ so technology you need to work :
+  frontend : html , tailwind css , reactjs with motion capture and animations transatition , effect hover modern libary , also nodejs 
+  backend : only with python with it most requried security , algorithm libary and working pip libary to working in codespace . 
+  databases : mysql . 
+  api : restfull , soap, which will best in trasfering data in faster time along without changes . 
+  technology in deploying : using LAN NETWORK , docker , and also tunnel by python to runs , when admin pannel then it give url then when the linked is shaed then it will be able to access as user pannel .
+  
+  along with its all function lets connect MCP with it so that working will be easy .  
+
+
+design and everythings should be like best resources collectng google drive for keeping in strutcuer format . and ilovepdf is for changing the file format features option . 
+
+
+ 
