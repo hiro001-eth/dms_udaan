@@ -67,7 +67,7 @@ export default function ConvertPage() {
       formData.append("file", file);
       formData.append("targetFormat", target);
 
-      const response = await fetch("/api/convert", {
+      const response = await fetch("/api/file-ops/convert", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -345,12 +345,24 @@ export default function ConvertPage() {
                   )}
                 </div>
 
-                {job.status === "completed" && (
+                {job.status === "completed" && job.downloadUrl && (
                   <div className="flex items-center gap-2">
                     <div className="p-1.5 rounded-full bg-accent">
                       <Check className="h-3 w-3 text-white" />
                     </div>
-                    <Button size="sm" variant="outline">
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = job.downloadUrl!;
+                        link.download = job.fileName;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }}
+                      data-testid={`button-download-${job.id}`}
+                    >
                       <Download className="h-4 w-4 mr-1" />
                       Download
                     </Button>

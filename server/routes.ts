@@ -9,6 +9,7 @@ import fs from "fs";
 import crypto from "crypto";
 import { insertUserSchema, insertFolderSchema, loginSchema } from "@shared/schema";
 import { z } from "zod";
+import * as fileProcessor from "./services/fileProcessor";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "udaan-secret-key-change-in-production";
 const SALT_ROUNDS = 10;
@@ -69,6 +70,16 @@ function adminMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const adminRoles = ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER"];
   if (!adminRoles.includes(req.user.role)) {
     return res.status(403).json({ message: "Forbidden" });
+  }
+  next();
+}
+
+function superAdminMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  if (req.user.role !== "SUPER_ADMIN") {
+    return res.status(403).json({ message: "Only Super Admin can perform this action" });
   }
   next();
 }
@@ -171,13 +182,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ message: "Logged out" });
   });
 
-  app.get("/api/users", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.get("/api/users", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     const users = await storage.getAllUsers();
     const safeUsers = users.map(({ password, ...u }) => u);
     res.json(safeUsers);
   });
 
-  app.post("/api/users", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.post("/api/users", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const data = insertUserSchema.parse(req.body);
       
@@ -212,7 +223,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.patch("/api/users/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.patch("/api/users/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const data = req.body;
@@ -240,7 +251,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.delete("/api/users/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.delete("/api/users/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     await storage.deleteUser(id);
     await storage.createAuditLog({
@@ -509,7 +520,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(activityData);
   });
 
-  app.post("/api/convert", authMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+  app.post("/api/file-ops/convert", authMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
     try {
       const file = req.file;
       if (!file) {
@@ -517,24 +528,304 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const { targetFormat } = req.body;
+      let outputPath: string;
+
+      const isImage = file.mimetype.startsWith("image/");
+      const isPdf = file.mimetype === "application/pdf";
+
+      if (targetFormat === "pdf" && isImage) {
+        outputPath = await fileProcessor.imageToPdf(file.path);
+      } else if (targetFormat === "png" && isPdf) {
+        outputPath = await fileProcessor.pdfToImage(file.path, 0);
+      } else if (["jpeg", "jpg", "png", "webp"].includes(targetFormat) && isImage) {
+        const format = targetFormat === "jpg" ? "jpeg" : targetFormat as "jpeg" | "png" | "webp";
+        outputPath = await fileProcessor.convertImageFormat(file.path, format);
+      } else {
+        return res.status(400).json({ message: "Unsupported conversion" });
+      }
 
       await storage.createAuditLog({
         userId: req.user!.id,
         action: "CONVERT",
         entityType: "DOCUMENT",
-        metadata: { 
-          sourceFile: file.originalname,
-          targetFormat,
-        },
+        metadata: { sourceFile: file.originalname, targetFormat },
+      });
+
+      const fileName = path.basename(outputPath);
+      res.json({
+        success: true,
+        downloadUrl: `/api/file-ops/download/${fileName}`,
+        fileName,
+      });
+    } catch (error) {
+      console.error("Conversion error:", error);
+      res.status(500).json({ message: "Conversion failed" });
+    }
+  });
+
+  app.post("/api/file-ops/merge", authMiddleware, upload.array("files", 20), async (req: AuthRequest, res: Response) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length < 2) {
+        return res.status(400).json({ message: "At least 2 files required" });
+      }
+
+      const { outputType } = req.body;
+      const filePaths = files.map(f => f.path);
+      let outputPath: string;
+
+      const allPdfs = files.every(f => f.mimetype === "application/pdf");
+      const allImages = files.every(f => f.mimetype.startsWith("image/"));
+
+      if (allPdfs) {
+        outputPath = await fileProcessor.mergePdfs(filePaths);
+      } else if (allImages && outputType === "pdf") {
+        outputPath = await fileProcessor.imagesToPdf(filePaths);
+      } else if (allImages) {
+        outputPath = await fileProcessor.createZipArchive(filePaths, "images");
+      } else {
+        outputPath = await fileProcessor.createZipArchive(filePaths, "merged-files");
+      }
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "MERGE",
+        entityType: "DOCUMENT",
+        metadata: { fileCount: files.length },
+      });
+
+      const fileName = path.basename(outputPath);
+      res.json({
+        success: true,
+        downloadUrl: `/api/file-ops/download/${fileName}`,
+        fileName,
+      });
+    } catch (error) {
+      console.error("Merge error:", error);
+      res.status(500).json({ message: "Merge failed" });
+    }
+  });
+
+  app.post("/api/file-ops/split", authMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "No file provided" });
+      }
+
+      if (file.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "Only PDF files can be split" });
+      }
+
+      const { pages } = req.body;
+      let outputPaths: string[];
+
+      if (pages) {
+        const pageNumbers = pages.split(",").map((p: string) => parseInt(p.trim()));
+        const outputPath = await fileProcessor.extractPages(file.path, pageNumbers);
+        outputPaths = [outputPath];
+      } else {
+        const pageCount = await fileProcessor.getPdfPageCount(file.path);
+        const ranges = Array.from({ length: pageCount }, (_, i) => ({ start: i + 1, end: i + 1 }));
+        outputPaths = await fileProcessor.splitPdf(file.path, ranges);
+      }
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "SPLIT",
+        entityType: "DOCUMENT",
+        metadata: { sourceFile: file.originalname },
+      });
+
+      if (outputPaths.length === 1) {
+        const fileName = path.basename(outputPaths[0]);
+        res.json({
+          success: true,
+          downloadUrl: `/api/file-ops/download/${fileName}`,
+          fileName,
+        });
+      } else {
+        const zipPath = await fileProcessor.createZipArchive(outputPaths, "split-pages");
+        const fileName = path.basename(zipPath);
+        res.json({
+          success: true,
+          downloadUrl: `/api/file-ops/download/${fileName}`,
+          fileName,
+        });
+      }
+    } catch (error) {
+      console.error("Split error:", error);
+      res.status(500).json({ message: "Split failed" });
+    }
+  });
+
+  app.post("/api/file-ops/compress", authMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "No file provided" });
+      }
+
+      const { quality } = req.body;
+      const qualityNum = parseInt(quality) || 70;
+
+      if (!file.mimetype.startsWith("image/")) {
+        return res.status(400).json({ message: "Only images can be compressed" });
+      }
+
+      const outputPath = await fileProcessor.compressImage(file.path, qualityNum);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "COMPRESS",
+        entityType: "DOCUMENT",
+        metadata: { sourceFile: file.originalname, quality: qualityNum },
+      });
+
+      const fileName = path.basename(outputPath);
+      res.json({
+        success: true,
+        downloadUrl: `/api/file-ops/download/${fileName}`,
+        fileName,
+        originalSize: file.size,
+        compressedSize: fs.statSync(outputPath).size,
+      });
+    } catch (error) {
+      console.error("Compress error:", error);
+      res.status(500).json({ message: "Compression failed" });
+    }
+  });
+
+  app.post("/api/file-ops/rotate", authMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "No file provided" });
+      }
+
+      if (file.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "Only PDFs can be rotated" });
+      }
+
+      const { degrees } = req.body;
+      const rotationDegrees = parseInt(degrees) || 90;
+
+      const outputPath = await fileProcessor.rotatePdf(file.path, rotationDegrees);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "ROTATE",
+        entityType: "DOCUMENT",
+        metadata: { sourceFile: file.originalname, degrees: rotationDegrees },
+      });
+
+      const fileName = path.basename(outputPath);
+      res.json({
+        success: true,
+        downloadUrl: `/api/file-ops/download/${fileName}`,
+        fileName,
+      });
+    } catch (error) {
+      console.error("Rotate error:", error);
+      res.status(500).json({ message: "Rotation failed" });
+    }
+  });
+
+  app.post("/api/file-ops/watermark", authMiddleware, upload.single("file"), async (req: AuthRequest, res: Response) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "No file provided" });
+      }
+
+      if (file.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "Only PDFs can be watermarked" });
+      }
+
+      const { text } = req.body;
+      if (!text) {
+        return res.status(400).json({ message: "Watermark text required" });
+      }
+
+      const outputPath = await fileProcessor.addWatermark(file.path, text);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "WATERMARK",
+        entityType: "DOCUMENT",
+        metadata: { sourceFile: file.originalname },
+      });
+
+      const fileName = path.basename(outputPath);
+      res.json({
+        success: true,
+        downloadUrl: `/api/file-ops/download/${fileName}`,
+        fileName,
+      });
+    } catch (error) {
+      console.error("Watermark error:", error);
+      res.status(500).json({ message: "Watermark failed" });
+    }
+  });
+
+  app.get("/api/file-ops/download/:fileName", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { fileName } = req.params;
+      const filePath = path.join(fileProcessor.getProcessedDir(), fileName);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ message: "File not found" });
+      }
+
+      res.download(filePath, fileName, (err) => {
+        if (!err) {
+          setTimeout(() => {
+            fs.unlink(filePath, () => {});
+          }, 60000);
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Download failed" });
+    }
+  });
+
+  app.post("/api/file-ops/batch-download", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { documentIds } = req.body;
+      if (!documentIds || !Array.isArray(documentIds) || documentIds.length === 0) {
+        return res.status(400).json({ message: "No documents selected" });
+      }
+
+      const filePaths: string[] = [];
+      for (const id of documentIds) {
+        const doc = await storage.getDocument(id);
+        if (doc && fs.existsSync(doc.filePath)) {
+          filePaths.push(doc.filePath);
+        }
+      }
+
+      if (filePaths.length === 0) {
+        return res.status(404).json({ message: "No valid documents found" });
+      }
+
+      const zipPath = await fileProcessor.createZipArchive(filePaths, "documents");
+      const fileName = path.basename(zipPath);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "BATCH_DOWNLOAD",
+        entityType: "DOCUMENT",
+        metadata: { documentCount: filePaths.length },
       });
 
       res.json({
         success: true,
-        downloadUrl: `/api/documents/${file.filename}/download`,
-        message: `File converted to ${targetFormat}`,
+        downloadUrl: `/api/file-ops/download/${fileName}`,
+        fileName,
       });
     } catch (error) {
-      res.status(500).json({ message: "Conversion failed" });
+      console.error("Batch download error:", error);
+      res.status(500).json({ message: "Batch download failed" });
     }
   });
 

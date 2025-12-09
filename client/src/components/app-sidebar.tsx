@@ -37,11 +37,11 @@ const userMenuItems = [
 ];
 
 const adminMenuItems = [
-  { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
-  { title: "User Management", url: "/admin/users", icon: Users },
-  { title: "Audit Logs", url: "/admin/audit", icon: Activity },
-  { title: "Activity Tracking", url: "/admin/activity", icon: Shield },
-  { title: "Settings", url: "/admin/settings", icon: Settings },
+  { title: "Dashboard", url: "/admin", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER"] },
+  { title: "User Management", url: "/admin/users", icon: Users, roles: ["SUPER_ADMIN"] },
+  { title: "Audit Logs", url: "/admin/audit", icon: Activity, roles: ["SUPER_ADMIN", "ORG_ADMIN"] },
+  { title: "Activity Tracking", url: "/admin/activity", icon: Shield, roles: ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER"] },
+  { title: "Settings", url: "/admin/settings", icon: Settings, roles: ["SUPER_ADMIN", "ORG_ADMIN"] },
 ];
 
 export function AppSidebar() {
@@ -49,7 +49,9 @@ export function AppSidebar() {
   const { user, logout } = useAuth();
   
   const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "ORG_ADMIN" || user?.role === "MANAGER";
-  const menuItems = location.startsWith("/admin") ? adminMenuItems : userMenuItems;
+  const menuItems = location.startsWith("/admin") 
+    ? adminMenuItems.filter(item => item.roles.includes(user?.role || ""))
+    : userMenuItems;
 
   const getInitials = (firstName: string, lastName: string) => {
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
