@@ -31,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import logoUrl from "@assets/app_logo-removebg-preview_(1)_1765298325671.png";
 
 const userMenuItems = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER", "STAFF", "VIEWER"] },
+  { title: "My Dashboard", url: "/user", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER", "STAFF", "VIEWER"] },
   { title: "My Files", url: "/files", icon: FolderOpen, roles: ["SUPER_ADMIN"] },
   { title: "Documents", url: "/documents", icon: FileText, roles: ["SUPER_ADMIN"] },
   { title: "Search", url: "/search", icon: Search, roles: ["SUPER_ADMIN"] },
@@ -42,7 +42,7 @@ const userMenuItems = [
 
 const adminMenuItems = [
   { title: "Dashboard", url: "/admin", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER"] },
-  { title: "User Management", url: "/admin/users", icon: Users, roles: ["SUPER_ADMIN"] },
+  { title: "User Management", url: "/admin/users", icon: Users, roles: ["SUPER_ADMIN", "ORG_ADMIN"] },
   { title: "Audit Logs", url: "/admin/audit", icon: Activity, roles: ["SUPER_ADMIN", "ORG_ADMIN"] },
   { title: "Activity Tracking", url: "/admin/activity", icon: Shield, roles: ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER"] },
   { title: "Settings", url: "/admin/settings", icon: Settings, roles: ["SUPER_ADMIN", "ORG_ADMIN"] },
@@ -64,7 +64,7 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-4 border-b border-sidebar-border">
-        <Link href="/dashboard" className="flex items-center gap-3">
+        <Link href="/user" className="flex items-center gap-3">
           <img src={logoUrl} alt="UDAAN Logo" className="h-12 w-12 object-contain" />
           <div>
             <h1 className="text-xl font-bold gradient-text">UDAAN</h1>
@@ -131,7 +131,15 @@ export function AppSidebar() {
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
-                    <Link href="/dashboard" data-testid="link-user-dashboard">
+                    <Link href="/user" data-testid="link-user-dashboard">
+                      <LayoutDashboard className="h-5 w-5" />
+                      <span>User Dashboard</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <Link href="/files" data-testid="link-user-files">
                       <FolderOpen className="h-5 w-5" />
                       <span>My Files</span>
                     </Link>

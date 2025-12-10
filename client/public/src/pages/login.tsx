@@ -15,7 +15,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form";
+} from "@/components/ui/form";  
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -51,7 +51,7 @@ export default function LoginPage() {
         title: "Welcome back!",
         description: "You have successfully logged in.",
       });
-      setLocation("/dashboard");
+      setLocation("/");
     } catch (error) {
       toast({
         title: "Login failed",
@@ -79,27 +79,11 @@ export default function LoginPage() {
             className="text-center"
           >
             <img src={logoUrl} alt="UDAAN" className="w-40 h-40 mx-auto mb-8 drop-shadow-2xl" />
-            <h1 className="text-5xl font-bold mb-4">UDAAN</h1>
-            <p className="text-xl opacity-90 mb-8">Secure Data Management System</p>
+            <h1 className="text-5xl font-bold mb-4">UDAAN AGENCIES</h1>
+            <p className="text-xl opacity-90 mb-8">  Management System</p>
             <div className="max-w-md mx-auto space-y-4 text-left">
-              <div className="flex items-center gap-3 bg-white/10 rounded-lg p-4 backdrop-blur-sm">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <Lock className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Enterprise Security</h3>
-                  <p className="text-sm opacity-80">AES-256 encryption at rest</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 bg-white/10 rounded-lg p-4 backdrop-blur-sm">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <ArrowRight className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Format Conversion</h3>
-                  <p className="text-sm opacity-80">PDF, DOCX, JPG and more</p>
-                </div>
-              </div>
+ 
+              
             </div>
           </motion.div>
         </div>
@@ -121,7 +105,6 @@ export default function LoginPage() {
             <CardHeader className="space-y-1 pb-6">
               <CardTitle className="text-2xl font-bold text-center">Welcome Back</CardTitle>
               <CardDescription className="text-center">
-                Sign in to access your documents
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -206,13 +189,12 @@ export default function LoginPage() {
               </Form>
 
               <div className="mt-6 text-center text-sm text-muted-foreground">
-                <p>Contact your administrator if you need access.</p>
               </div>
             </CardContent>
           </Card>
 
           <p className="text-center text-xs text-muted-foreground mt-8">
-            Secure enterprise document management powered by UDAAN
+             Crafted in the Language of Innovation ❤️ by UDAAN IT Department.
           </p>
         </motion.div>
       </div>

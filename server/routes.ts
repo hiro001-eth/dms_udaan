@@ -84,7 +84,34 @@ function superAdminMiddleware(req: AuthRequest, res: Response, next: NextFunctio
   next();
 }
 
+function superOrOrgAdminMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  if (req.user.role !== "SUPER_ADMIN" && req.user.role !== "ORG_ADMIN") {
+    return res.status(403).json({ message: "Only Super Admin or Organization Admin can perform this action" });
+  }
+  next();
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  const existingUsers = await storage.getAllUsers();
+  if (existingUsers.length === 0) {
+    const defaultUsername = "admin";
+    const defaultPassword = "admin123";
+
+    const hashedPassword = await bcrypt.hash(defaultPassword, SALT_ROUNDS);
+    await storage.createUser({
+      username: defaultUsername,
+      email: "admin@example.com",
+      password: hashedPassword,
+      firstName: "Admin",
+      lastName: "User",
+      role: "SUPER_ADMIN",
+      isActive: true,
+    });
+  }
+
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
       const existingUsers = await storage.getAllUsers();
@@ -182,7 +209,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ message: "Logged out" });
   });
 
-  app.get("/api/users", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.get("/api/users", authMiddleware, superOrOrgAdminMiddleware, async (req: AuthRequest, res: Response) => {
     const users = await storage.getAllUsers();
     const safeUsers = users.map(({ password, ...u }) => u);
     res.json(safeUsers);
@@ -233,18 +260,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/users", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.post("/api/users", authMiddleware, superOrOrgAdminMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const data = insertUserSchema.parse(req.body);
-      
+
+      if (req.user?.role === "ORG_ADMIN" && data.role !== "STAFF" && data.role !== "VIEWER") {
+        return res.status(403).json({ message: "Organization Admin can only create STAFF or VIEWER users" });
+      }
+
       const existingEmail = await storage.getUserByEmail(data.email);
       if (existingEmail) {
-        return res.status(400).json({ message: "Email already exists" });
+        return res.status(409).json({ message: "Email already exists" });
       }
-      
+
       const existingUsername = await storage.getUserByUsername(data.username);
       if (existingUsername) {
-        return res.status(400).json({ message: "Username already exists" });
+        return res.status(409).json({ message: "Username already exists" });
       }
 
       const hashedPassword = await bcrypt.hash(data.password, SALT_ROUNDS);
@@ -268,7 +299,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.patch("/api/users/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.patch("/api/users/:id", authMiddleware, superOrOrgAdminMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const data = req.body;
@@ -296,7 +327,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.delete("/api/users/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.delete("/api/users/:id", authMiddleware, superOrOrgAdminMiddleware, async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     await storage.deleteUser(id);
     await storage.createAuditLog({

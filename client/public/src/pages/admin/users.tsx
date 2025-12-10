@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useLocation } from "wouter";
 import {
   Users,
   Plus,
@@ -15,6 +16,7 @@ import {
   UserX,
   Mail,
   Shield,
+  Activity as ActivityIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +62,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { User } from "@shared/schema";
@@ -70,7 +73,10 @@ const createUserSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  role: z.enum(["SUPER_ADMIN", "ORG_ADMIN", "MANAGER", "STAFF", "VIEWER"]),
+  // Only allow creation of non-admin roles from this form so accounts get access
+  // to the user dashboard but not the admin area.
+  role: z.enum(["STAFF", "VIEWER"]),
+  isActive: z.boolean().default(true),
 });
 
 type CreateUserFormData = z.infer<typeof createUserSchema>;
@@ -79,6 +85,10 @@ export default function UserManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [passwordStrength, setPasswordStrength] = useState<"weak" | "medium" | "strong">("weak");
+  const [usernameSuggestions, setUsernameSuggestions] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
 
   const { data: users, isLoading } = useQuery<User[]>({
@@ -87,6 +97,7 @@ export default function UserManagementPage() {
 
   const form = useForm<CreateUserFormData>({
     resolver: zodResolver(createUserSchema),
+    mode: "onChange",
     defaultValues: {
       email: "",
       username: "",
@@ -94,8 +105,14 @@ export default function UserManagementPage() {
       firstName: "",
       lastName: "",
       role: "STAFF",
+      isActive: true,
     },
   });
+
+  const { isValid } = form.formState;
+  const watchFirstName = form.watch("firstName");
+  const watchLastName = form.watch("lastName");
+  const watchPassword = form.watch("password");
 
   const createUserMutation = useMutation({
     mutationFn: async (data: CreateUserFormData) => {
@@ -104,14 +121,49 @@ export default function UserManagementPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setShowCreateDialog(false);
-      form.reset();
+      form.reset({
+        email: "",
+        username: "",
+        password: "",
+        firstName: "",
+        lastName: "",
+        role: "STAFF",
+        isActive: true,
+      });
+      setPasswordStrength("weak");
+      setUsernameSuggestions([]);
       toast({ title: "User created successfully" });
     },
     onError: (error) => {
-      toast({ 
-        title: "Failed to create user", 
-        description: error instanceof Error ? error.message : "Unknown error",
-        variant: "destructive" 
+      let description = error instanceof Error ? error.message : "Unknown error";
+      if (error instanceof Error) {
+        const match = error.message.match(/^(\d+):\s*(.*)$/);
+        if (match) {
+          const statusCode = Number(match[1]);
+          const bodyText = match[2];
+          try {
+            const parsed = JSON.parse(bodyText);
+            if (parsed && typeof parsed.message === "string") {
+              description = parsed.message;
+              if (statusCode === 409) {
+                const lower = parsed.message.toLowerCase();
+                if (lower.includes("email")) {
+                  form.setError("email", { type: "server", message: parsed.message });
+                }
+                if (lower.includes("username")) {
+                  form.setError("username", { type: "server", message: parsed.message });
+                }
+              }
+            }
+          } catch {
+            // ignore JSON parse errors
+          }
+        }
+      }
+      toast({
+        title: "Failed to create user",
+        description,
+        variant: "destructive",
       });
     },
   });
@@ -144,6 +196,57 @@ export default function UserManagementPage() {
       user.username.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const pageSize = 10;
+  const totalUsers = filteredUsers?.length ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedUsers = filteredUsers?.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize,
+  );
+
+  useEffect(() => {
+    const value = watchPassword || "";
+    if (!value) {
+      setPasswordStrength("weak");
+      return;
+    }
+    let score = 0;
+    if (value.length >= 6) score++;
+    if (/[A-Z]/.test(value) && /[a-z]/.test(value)) score++;
+    if (/\d/.test(value)) score++;
+    if (/[^A-Za-z0-9]/.test(value)) score++;
+
+    if (score >= 3 && value.length >= 8) setPasswordStrength("strong");
+    else if (score >= 2) setPasswordStrength("medium");
+    else setPasswordStrength("weak");
+  }, [watchPassword]);
+
+  useEffect(() => {
+    const first = (watchFirstName || "").trim().toLowerCase();
+    const last = (watchLastName || "").trim().toLowerCase();
+    if (!first && !last) {
+      setUsernameSuggestions([]);
+      return;
+    }
+    const set = new Set<string>();
+    if (first && last) {
+      set.add(`${first}.${last}`);
+      set.add(`${first}${last}`);
+      set.add(`${first}_${last}`);
+      set.add(`${first.charAt(0)}${last}`);
+    } else if (first) {
+      set.add(first);
+    } else if (last) {
+      set.add(last);
+    }
+    setUsernameSuggestions(Array.from(set).slice(0, 4));
+  }, [watchFirstName, watchLastName]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, users]);
+
   const getInitials = (firstName: string, lastName: string) => {
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
   };
@@ -153,7 +256,9 @@ export default function UserManagementPage() {
       case "SUPER_ADMIN": return "bg-destructive text-destructive-foreground";
       case "ORG_ADMIN": return "bg-primary text-primary-foreground";
       case "MANAGER": return "bg-chart-3 text-white";
-      case "STAFF": return "bg-accent text-accent-foreground";
+      case "STAFF":
+      case "VIEWER":
+        return "bg-accent text-accent-foreground";
       default: return "bg-muted text-muted-foreground";
     }
   };
@@ -199,7 +304,7 @@ export default function UserManagementPage() {
               <Input
                 placeholder="Search users..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                 className="pl-10"
                 data-testid="input-search-users"
               />
@@ -245,7 +350,7 @@ export default function UserManagementPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers?.map((user) => (
+                {paginatedUsers?.map((user) => (
                   <TableRow key={user.id} data-testid={`user-row-${user.id}`}>
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -324,6 +429,12 @@ export default function UserManagementPage() {
                               </>
                             )}
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => setLocation(`/admin/audit?userId=${user.id}`)}
+                          >
+                            <ActivityIcon className="h-4 w-4 mr-2" />
+                            View Activity
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive"
@@ -357,7 +468,7 @@ export default function UserManagementPage() {
                 <FormField
                   control={form.control}
                   name="firstName"
-                  render={({ field }) => (
+                  render={({ field }: { field: any }) => (
                     <FormItem>
                       <FormLabel>First Name</FormLabel>
                       <FormControl>
@@ -370,7 +481,7 @@ export default function UserManagementPage() {
                 <FormField
                   control={form.control}
                   name="lastName"
-                  render={({ field }) => (
+                  render={({ field }: { field: any }) => (
                     <FormItem>
                       <FormLabel>Last Name</FormLabel>
                       <FormControl>
@@ -385,7 +496,7 @@ export default function UserManagementPage() {
               <FormField
                 control={form.control}
                 name="email"
-                render={({ field }) => (
+                render={({ field }: { field: any }) => (
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
@@ -405,12 +516,29 @@ export default function UserManagementPage() {
               <FormField
                 control={form.control}
                 name="username"
-                render={({ field }) => (
+                render={({ field }: { field: any }) => (
                   <FormItem>
                     <FormLabel>Username</FormLabel>
                     <FormControl>
                       <Input placeholder="johndoe" autoComplete="off" data-testid="input-new-username" {...field} />
                     </FormControl>
+                    {usernameSuggestions.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        <span>Suggestions:</span>
+                        {usernameSuggestions.map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            type="button"
+                            className="px-2 py-0.5 rounded-full border text-xs hover:bg-muted transition-colors"
+                            onClick={() => {
+                              form.setValue("username", suggestion, { shouldValidate: true });
+                            }}
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -419,7 +547,7 @@ export default function UserManagementPage() {
               <FormField
                 control={form.control}
                 name="password"
-                render={({ field }) => (
+                render={({ field }: { field: any }) => (
                   <FormItem>
                     <FormLabel>Password</FormLabel>
                     <FormControl>
@@ -431,6 +559,17 @@ export default function UserManagementPage() {
                         {...field}
                       />
                     </FormControl>
+                    <p
+                      className={`text-xs mt-1 ${
+                        passwordStrength === "strong"
+                          ? "text-green-600"
+                          : passwordStrength === "medium"
+                          ? "text-yellow-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      Strength: {passwordStrength}
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -439,7 +578,7 @@ export default function UserManagementPage() {
               <FormField
                 control={form.control}
                 name="role"
-                render={({ field }) => (
+                render={({ field }: { field: any }) => (
                   <FormItem>
                     <FormLabel>Role</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
@@ -449,13 +588,32 @@ export default function UserManagementPage() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="VIEWER">Viewer</SelectItem>
-                        <SelectItem value="STAFF">Staff</SelectItem>
-                        <SelectItem value="MANAGER">Manager</SelectItem>
-                        <SelectItem value="ORG_ADMIN">Organization Admin</SelectItem>
-                        <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
+                        <SelectItem value="STAFF">Staff (standard user)</SelectItem>
+                        <SelectItem value="VIEWER">Viewer (read-only user)</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="isActive"
+                render={({ field }: { field: any }) => (
+                  <FormItem className="flex items-center justify-between rounded-md border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel>Status</FormLabel>
+                      <p className="text-xs text-muted-foreground">
+                        {field.value ? "Active user can log in" : "Inactive user cannot log in"}
+                      </p>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={(value) => field.onChange(value)}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -472,7 +630,7 @@ export default function UserManagementPage() {
                 <Button
                   type="submit"
                   className="gradient-bg text-white"
-                  disabled={createUserMutation.isPending}
+                  disabled={!isValid || passwordStrength === "weak" || createUserMutation.isPending}
                   data-testid="button-submit-user"
                 >
                   {createUserMutation.isPending ? "Creating..." : "Create User"}

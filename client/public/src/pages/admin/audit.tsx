@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { apiRequest } from "@/lib/queryClient";
 import type { AuditLog, User as UserType } from "@shared/schema";
 
 const actionIcons: Record<string, typeof Activity> = {
@@ -77,8 +78,19 @@ export default function AuditLogsPage() {
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [entityFilter, setEntityFilter] = useState<string>("all");
 
+  const searchParams = new URLSearchParams(window.location.search);
+  const userId = searchParams.get("userId") || undefined;
+
   const { data: logs, isLoading, refetch } = useQuery<AuditLogWithUser[]>({
-    queryKey: ["/api/audit/logs"],
+    queryKey: ["audit-logs", userId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (userId) params.set("userId", userId);
+      const queryString = params.toString();
+      const url = queryString ? `/api/audit/logs?${queryString}` : "/api/audit/logs";
+      const res = await apiRequest("GET", url);
+      return res.json();
+    },
   });
 
   const filteredLogs = logs?.filter((log) => {

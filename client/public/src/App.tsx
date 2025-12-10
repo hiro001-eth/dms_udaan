@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
+import UserDashboardPage from "@/pages/user";
 import FilesPage from "@/pages/files";
 import DocumentsPage from "@/pages/documents";
 import ConvertPage from "@/pages/convert";
@@ -108,6 +109,9 @@ function AuthenticatedRoutes() {
         <Route path="/dashboard">
           <ProtectedRoute component={DashboardPage} />
         </Route>
+        <Route path="/user">
+          <ProtectedRoute component={UserDashboardPage} />
+        </Route>
         <Route path="/files">
           <ProtectedRoute component={FilesPage} />
         </Route>
@@ -157,7 +161,7 @@ function AuthenticatedRoutes() {
 }
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [location] = useLocation();
 
   if (isLoading) {
@@ -172,7 +176,8 @@ function Router() {
   }
 
   if (location === "/" && isAuthenticated) {
-    return <Redirect to="/dashboard" />;
+    const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "ORG_ADMIN" || user?.role === "MANAGER";
+    return <Redirect to={isAdmin ? "/admin" : "/user"} />;
   }
 
   if (location === "/" && !isAuthenticated) {
@@ -182,7 +187,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login">
-        {isAuthenticated ? <Redirect to="/dashboard" /> : <LoginPage />}
+        {isAuthenticated ? <Redirect to="/" /> : <LoginPage />}
       </Route>
       <Route path="/:rest*">
         <AuthenticatedRoutes />
