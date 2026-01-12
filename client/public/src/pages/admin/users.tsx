@@ -17,6 +17,11 @@ import {
   Mail,
   Shield,
   Activity as ActivityIcon,
+  Filter,
+  ArrowUpDown,
+  Download,
+  Info,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,11 +93,31 @@ export default function UserManagementPage() {
   const [passwordStrength, setPasswordStrength] = useState<"weak" | "medium" | "strong">("weak");
   const [usernameSuggestions, setUsernameSuggestions] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [roleFilter, setRoleFilter] = useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [sortBy, setSortBy] = useState<"name" | "username" | "role" | "lastLogin">("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  const { data: users, isLoading } = useQuery<User[]>({
+  const { data: users, isLoading, error } = useQuery<User[]>({
     queryKey: ["/api/users"],
+  });
+
+  const forceLogoutMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("POST", `/api/users/${id}/force-logout`);
+    },
+    onSuccess: () => {
+      toast({ title: "User sessions terminated" });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to terminate sessions",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
   });
 
   const form = useForm<CreateUserFormData>({
@@ -188,19 +213,45 @@ export default function UserManagementPage() {
     },
   });
 
-  const filteredUsers = users?.filter(
-    (user) =>
+  const filteredUsers = users
+    ?.filter((user) =>
       user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      user.username.toLowerCase().includes(searchQuery.toLowerCase()),
+    )
+    ?.filter((user) => {
+      if (roleFilter !== "ALL" && user.role !== roleFilter) return false;
+      if (statusFilter === "ACTIVE" && !user.isActive) return false;
+      if (statusFilter === "INACTIVE" && user.isActive) return false;
+      return true;
+    });
+
+  const sortedUsers = filteredUsers
+    ? [...filteredUsers].sort((a, b) => {
+        let cmp = 0;
+        if (sortBy === "name") {
+          const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
+          const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
+          cmp = nameA.localeCompare(nameB);
+        } else if (sortBy === "username") {
+          cmp = a.username.toLowerCase().localeCompare(b.username.toLowerCase());
+        } else if (sortBy === "role") {
+          cmp = a.role.localeCompare(b.role);
+        } else if (sortBy === "lastLogin") {
+          const timeA = a.lastLoginAt ? new Date(a.lastLoginAt).getTime() : 0;
+          const timeB = b.lastLoginAt ? new Date(b.lastLoginAt).getTime() : 0;
+          cmp = timeA - timeB;
+        }
+        return sortDirection === "asc" ? cmp : -cmp;
+      })
+    : [];
 
   const pageSize = 10;
   const totalUsers = filteredUsers?.length ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
   const safePage = Math.min(currentPage, totalPages);
-  const paginatedUsers = filteredUsers?.slice(
+  const paginatedUsers = sortedUsers?.slice(
     (safePage - 1) * pageSize,
     safePage * pageSize,
   );
@@ -267,6 +318,58 @@ export default function UserManagementPage() {
     createUserMutation.mutate(data);
   };
 
+  const activeUsersCount = users?.filter((u) => u.isActive).length ?? 0;
+  const staffUsersCount = users?.filter((u) => u.role === "STAFF").length ?? 0;
+  const viewerUsersCount = users?.filter((u) => u.role === "VIEWER").length ?? 0;
+
+  const handleExportCsv = () => {
+    if (!sortedUsers || sortedUsers.length === 0) {
+      toast({
+        title: "Nothing to export",
+        description: "There are no users in the current view.",
+      });
+      return;
+    }
+
+    const header = [
+      "id",
+      "firstName",
+      "lastName",
+      "email",
+      "username",
+      "role",
+      "isActive",
+      "lastLoginAt",
+      "createdAt",
+    ];
+
+    const rows = sortedUsers.map((u) => [
+      u.id,
+      u.firstName,
+      u.lastName,
+      u.email,
+      u.username,
+      u.role,
+      u.isActive ? "true" : "false",
+      u.lastLoginAt ?? "",
+      u.createdAt ?? "",
+    ]);
+
+    const csv = [header, ...rows]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "users_export.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -275,6 +378,24 @@ export default function UserManagementPage() {
           <p className="text-muted-foreground mt-1">
             Create, edit, and manage user accounts
           </p>
+          <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <Users className="h-3 w-3" />
+              Total: {users?.length ?? 0}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <UserCheck className="h-3 w-3" />
+              Active: {activeUsersCount}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Shield className="h-3 w-3" />
+              Staff: {staffUsersCount}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Mail className="h-3 w-3" />
+              Viewers: {viewerUsersCount}
+            </span>
+          </div>
         </div>
         <Button
           className="gradient-bg text-white"
@@ -309,6 +430,61 @@ export default function UserManagementPage() {
                 data-testid="input-search-users"
               />
             </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue placeholder="Role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All roles</SelectItem>
+                  <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
+                  <SelectItem value="ORG_ADMIN">Org Admin</SelectItem>
+                  <SelectItem value="MANAGER">Manager</SelectItem>
+                  <SelectItem value="STAFF">Staff</SelectItem>
+                  <SelectItem value="VIEWER">Viewer</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Any status</SelectItem>
+                  <SelectItem value="ACTIVE">Active</SelectItem>
+                  <SelectItem value="INACTIVE">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="username">Username</SelectItem>
+                  <SelectItem value="role">Role</SelectItem>
+                  <SelectItem value="lastLogin">Last login</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setSortDirection(sortDirection === "asc" ? "desc" : "asc")}
+                className="h-8 w-8"
+              >
+                <ArrowUpDown className="h-3 w-3" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={handleExportCsv}
+                className="h-8 w-8"
+                title="Export CSV"
+              >
+                <Download className="h-3 w-3" />
+              </Button>
+            </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Users className="h-4 w-4" />
               {users?.length ?? 0} users
@@ -328,6 +504,14 @@ export default function UserManagementPage() {
                   <Skeleton className="h-6 w-16" />
                 </div>
               ))}
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <h3 className="font-medium mb-2">Unable to load users</h3>
+              <p className="text-muted-foreground text-sm">
+                {error instanceof Error ? error.message : "An unexpected error occurred while loading user data."}
+              </p>
             </div>
           ) : filteredUsers?.length === 0 ? (
             <div className="text-center py-12">
@@ -434,6 +618,12 @@ export default function UserManagementPage() {
                           >
                             <ActivityIcon className="h-4 w-4 mr-2" />
                             View Activity
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => forceLogoutMutation.mutate(user.id)}
+                          >
+                            <LogOut className="h-4 w-4 mr-2" />
+                            Force Logout Sessions
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -638,6 +828,68 @@ export default function UserManagementPage() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>User Details</DialogTitle>
+            <DialogDescription>
+              View key information about this user account.
+            </DialogDescription>
+          </DialogHeader>
+          {editingUser && (
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-9 w-9">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                    {getInitials(editingUser.firstName, editingUser.lastName)}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-medium">
+                    {editingUser.firstName} {editingUser.lastName}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{editingUser.email}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <div className="flex items-center gap-1 text-xs">
+                  <Shield className="h-3 w-3" />
+                  <span className="font-medium">Role:</span>
+                  <span>{editingUser.role.replace("_", " ")}</span>
+                </div>
+                <div className="flex items-center gap-1 text-xs">
+                  <Users className="h-3 w-3" />
+                  <span className="font-medium">Username:</span>
+                  <span className="font-mono">{editingUser.username}</span>
+                </div>
+                <div className="flex items-center gap-1 text-xs">
+                  <UserCheck className="h-3 w-3" />
+                  <span className="font-medium">Status:</span>
+                  <span>{editingUser.isActive ? "Active" : "Inactive"}</span>
+                </div>
+                <div className="flex items-center gap-1 text-xs">
+                  <ActivityIcon className="h-3 w-3" />
+                  <span className="font-medium">Last login:</span>
+                  <span>
+                    {editingUser.lastLoginAt
+                      ? new Date(editingUser.lastLoginAt).toLocaleString()
+                      : "Never"}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <Info className="h-3 w-3" />
+                  <span>User ID: {editingUser.id}</span>
+                </div>
+                <div>Created: {new Date(editingUser.createdAt).toLocaleString()}</div>
+                <div>Updated: {new Date(editingUser.updatedAt).toLocaleString()}</div>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

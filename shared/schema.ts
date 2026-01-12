@@ -6,21 +6,34 @@ import { z } from "zod";
 
 export const userRoleEnum = pgEnum("user_role", ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER", "STAFF", "VIEWER"]);
 export const documentStatusEnum = pgEnum("document_status", ["ACTIVE", "ARCHIVED", "DELETED"]);
+export const employmentStatusEnum = pgEnum("employment_status", ["ACTIVE", "INACTIVE", "TERMINATED"]);
 export const auditActionEnum = pgEnum("audit_action", [
   "LOGIN", "LOGOUT", "UPLOAD", "DOWNLOAD", "UPDATE_METADATA", 
   "DELETE", "RESTORE", "PERMISSION_CHANGE", "CREATE_FOLDER", 
   "DELETE_FOLDER", "SHARE", "CONVERT", "CREATE_USER", "UPDATE_USER",
   "MERGE", "SPLIT", "COMPRESS", "ROTATE", "WATERMARK", "BATCH_DOWNLOAD",
   "BATCH_COMPRESS", "BATCH_CONVERT", "BATCH_RESIZE", "BATCH_WATERMARK",
-  "BATCH_ROTATE", "BATCH_PAGE_NUMBERS"
+  "BATCH_ROTATE", "BATCH_PAGE_NUMBERS",
+  "CREATE_EMPLOYEE", "UPDATE_EMPLOYEE", "DELETE_EMPLOYEE",
+  "CREATE_DEPARTMENT", "UPDATE_DEPARTMENT", "DELETE_DEPARTMENT"
 ]);
-export const entityTypeEnum = pgEnum("entity_type", ["DOCUMENT", "FOLDER", "USER", "ORGANIZATION", "SHARE"]);
+export const entityTypeEnum = pgEnum("entity_type", ["DOCUMENT", "FOLDER", "USER", "ORGANIZATION", "SHARE", "EMPLOYEE", "DEPARTMENT"]);
 
 export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   code: text("code").notNull().unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const departments = pgTable("departments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id),
+  name: text("name").notNull(),
+  code: text("code").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const users = pgTable("users", {
@@ -34,6 +47,19 @@ export const users = pgTable("users", {
   role: userRoleEnum("role").notNull().default("STAFF"),
   isActive: boolean("is_active").notNull().default(true),
   lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const employeeProfiles = pgTable("employee_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull().unique(),
+  departmentId: varchar("department_id").references(() => departments.id),
+  monitorId: varchar("monitor_id").references(() => users.id),
+  phone: text("phone"),
+  location: text("location"),
+  appointedDate: timestamp("appointed_date"),
+  employmentStatus: employmentStatusEnum("employment_status").notNull().default("ACTIVE"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -132,6 +158,7 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   folders: many(folders),
   documents: many(documents),
   auditLogs: many(auditLogs),
+  departments: many(departments),
 }));
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -144,6 +171,33 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   auditLogs: many(auditLogs),
   sessions: many(sessions),
   activities: many(userActivity),
+  employeeProfile: one(employeeProfiles, {
+    fields: [users.id],
+    references: [employeeProfiles.userId],
+  }),
+}));
+
+export const departmentsRelations = relations(departments, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [departments.organizationId],
+    references: [organizations.id],
+  }),
+  employees: many(employeeProfiles),
+}));
+
+export const employeeProfilesRelations = relations(employeeProfiles, ({ one }) => ({
+  user: one(users, {
+    fields: [employeeProfiles.userId],
+    references: [users.id],
+  }),
+  department: one(departments, {
+    fields: [employeeProfiles.departmentId],
+    references: [departments.id],
+  }),
+  monitor: one(users, {
+    fields: [employeeProfiles.monitorId],
+    references: [users.id],
+  }),
 }));
 
 export const foldersRelations = relations(folders, ({ one, many }) => ({
@@ -241,7 +295,9 @@ export const userActivityRelations = relations(userActivity, ({ one }) => ({
 }));
 
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({ id: true, createdAt: true });
+export const insertDepartmentSchema = createInsertSchema(departments).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true, lastLoginAt: true });
+export const insertEmployeeProfileSchema = createInsertSchema(employeeProfiles).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertFolderSchema = createInsertSchema(folders).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, uploadedAt: true, updatedAt: true });
 export const insertDocumentTagSchema = createInsertSchema(documentTags).omit({ id: true });
@@ -252,7 +308,10 @@ export const insertSessionSchema = createInsertSchema(sessions).omit({ id: true,
 export const insertUserActivitySchema = createInsertSchema(userActivity).omit({ id: true });
 
 export const loginSchema = z.object({
-  username: z.string().min(1, "Username is required"),
+  username: z
+    .string()
+    .min(1, "Username is required")
+    .transform((value) => value.trim()),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
@@ -267,8 +326,12 @@ export const registerUserSchema = insertUserSchema.extend({
 
 export type Organization = typeof organizations.$inferSelect;
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+export type Department = typeof departments.$inferSelect;
+export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type EmployeeProfile = typeof employeeProfiles.$inferSelect;
+export type InsertEmployeeProfile = z.infer<typeof insertEmployeeProfileSchema>;
 export type Folder = typeof folders.$inferSelect;
 export type InsertFolder = z.infer<typeof insertFolderSchema>;
 export type Document = typeof documents.$inferSelect;

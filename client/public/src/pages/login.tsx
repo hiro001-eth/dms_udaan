@@ -19,7 +19,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { ThemeToggle } from "@/components/theme-toggle";
-import logoUrl from "@assets/app_logo-removebg-preview_(1)_1765298325671.png";
+import logoUrl from "@assets/udaan-logo.svg";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -29,7 +29,7 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -51,7 +51,11 @@ export default function LoginPage() {
         title: "Welcome back!",
         description: "You have successfully logged in.",
       });
-      setLocation("/");
+      const queryString = location.split("?")[1] ?? "";
+      const params = new URLSearchParams(queryString);
+      const next = params.get("next");
+      const target = next && next.startsWith("/") ? next : "/";
+      setLocation(target);
     } catch (error) {
       toast({
         title: "Login failed",

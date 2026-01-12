@@ -1,11 +1,12 @@
 import {
   users, folders, documents, documentTags, documentVersions, shareCodes,
-  auditLogs, sessions, userActivity, organizations,
+  auditLogs, sessions, userActivity, organizations, departments, employeeProfiles,
   type User, type InsertUser, type Folder, type InsertFolder,
   type Document, type InsertDocument, type DocumentTag, type InsertDocumentTag,
   type DocumentVersion, type InsertDocumentVersion, type ShareCode, type InsertShareCode,
   type AuditLog, type InsertAuditLog, type Session, type InsertSession,
-  type UserActivity, type InsertUserActivity, type Organization, type InsertOrganization
+  type UserActivity, type InsertUserActivity, type Organization, type InsertOrganization,
+  type Department, type InsertDepartment, type EmployeeProfile, type InsertEmployeeProfile
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, like, sql, isNull } from "drizzle-orm";
@@ -60,6 +61,17 @@ export interface IStorage {
   
   getOrganization(id: string): Promise<Organization | undefined>;
   createOrganization(org: InsertOrganization): Promise<Organization>;
+  
+  getDepartment(id: string): Promise<Department | undefined>;
+  getDepartments(): Promise<Department[]>;
+  createDepartment(dept: InsertDepartment): Promise<Department>;
+  updateDepartment(id: string, data: Partial<InsertDepartment>): Promise<Department | undefined>;
+  deleteDepartment(id: string): Promise<void>;
+  
+  getEmployeeProfileByUserId(userId: string): Promise<EmployeeProfile | undefined>;
+  createEmployeeProfile(profile: InsertEmployeeProfile): Promise<EmployeeProfile>;
+  updateEmployeeProfile(id: string, data: Partial<InsertEmployeeProfile>): Promise<EmployeeProfile | undefined>;
+  deleteEmployeeProfile(id: string): Promise<void>;
   
   getDashboardStats(): Promise<{ totalDocuments: number; totalFolders: number; recentUploads: number; sharedItems: number }>;
   getAdminStats(): Promise<{ totalUsers: number; activeUsers: number; totalDocuments: number; totalFolders: number; storageUsedMB: number; recentLogins: number }>;
@@ -305,6 +317,56 @@ export class DatabaseStorage implements IStorage {
   async createOrganization(org: InsertOrganization): Promise<Organization> {
     const [created] = await db.insert(organizations).values(org).returning();
     return created;
+  }
+
+  async getDepartment(id: string): Promise<Department | undefined> {
+    const [dept] = await db.select().from(departments).where(eq(departments.id, id));
+    return dept || undefined;
+  }
+
+  async getDepartments(): Promise<Department[]> {
+    return db.select().from(departments).orderBy(departments.name);
+  }
+
+  async createDepartment(dept: InsertDepartment): Promise<Department> {
+    const [created] = await db.insert(departments).values(dept).returning();
+    return created;
+  }
+
+  async updateDepartment(id: string, data: Partial<InsertDepartment>): Promise<Department | undefined> {
+    const [updated] = await db
+      .update(departments)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(departments.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteDepartment(id: string): Promise<void> {
+    await db.delete(departments).where(eq(departments.id, id));
+  }
+
+  async getEmployeeProfileByUserId(userId: string): Promise<EmployeeProfile | undefined> {
+    const [profile] = await db.select().from(employeeProfiles).where(eq(employeeProfiles.userId, userId));
+    return profile || undefined;
+  }
+
+  async createEmployeeProfile(profile: InsertEmployeeProfile): Promise<EmployeeProfile> {
+    const [created] = await db.insert(employeeProfiles).values(profile).returning();
+    return created;
+  }
+
+  async updateEmployeeProfile(id: string, data: Partial<InsertEmployeeProfile>): Promise<EmployeeProfile | undefined> {
+    const [updated] = await db
+      .update(employeeProfiles)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(employeeProfiles.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteEmployeeProfile(id: string): Promise<void> {
+    await db.delete(employeeProfiles).where(eq(employeeProfiles.id, id));
   }
 
   async getDashboardStats(): Promise<{ totalDocuments: number; totalFolders: number; recentUploads: number; sharedItems: number }> {

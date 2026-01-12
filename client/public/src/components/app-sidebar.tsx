@@ -28,7 +28,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import logoUrl from "@assets/app_logo-removebg-preview_(1)_1765298325671.png";
+import logoUrl from "@assets/udaan-logo.svg";
 
 const userMenuItems = [
   { title: "My Dashboard", url: "/user", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER", "STAFF", "VIEWER"] },
@@ -42,10 +42,11 @@ const userMenuItems = [
 
 const adminMenuItems = [
   { title: "Dashboard", url: "/admin", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER"] },
-  { title: "User Management", url: "/admin/users", icon: Users, roles: ["SUPER_ADMIN", "ORG_ADMIN"] },
-  { title: "Audit Logs", url: "/admin/audit", icon: Activity, roles: ["SUPER_ADMIN", "ORG_ADMIN"] },
+  { title: "User Management", url: "/admin/user-management", icon: Users, roles: ["SUPER_ADMIN"] },
+  { title: "Employee Management System", url: "/admin/employees", icon: Users, roles: ["SUPER_ADMIN"] },
+  { title: "Audit Logs", url: "/admin/audit", icon: Activity, roles: ["SUPER_ADMIN"] },
   { title: "Activity Tracking", url: "/admin/activity", icon: Shield, roles: ["SUPER_ADMIN", "ORG_ADMIN", "MANAGER"] },
-  { title: "Settings", url: "/admin/settings", icon: Settings, roles: ["SUPER_ADMIN", "ORG_ADMIN"] },
+  { title: "Settings", url: "/admin/settings", icon: Settings, roles: ["SUPER_ADMIN"] },
 ];
 
 export function AppSidebar() {

@@ -23,11 +23,13 @@ import AdminDashboard from "@/pages/admin/index";
 import UserManagementPage from "@/pages/admin/users";
 import AuditLogsPage from "@/pages/admin/audit";
 import ActivityTrackingPage from "@/pages/admin/activity";
+import EmployeeManagementPage from "@/pages/admin/employees";
 import NotFound from "@/pages/not-found";
+import LandingPage from "@/pages/landing";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, isLoading } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   if (isLoading) {
     return (
@@ -42,7 +44,37 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   if (!isAuthenticated) {
-    setLocation("/login");
+    const encoded = encodeURIComponent(location);
+    setLocation(`/login?next=${encoded}`);
+    return null;
+  }
+
+  return <Component />;
+}
+
+function SuperAdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="space-y-4 w-full max-w-md p-8">
+          <Skeleton className="h-12 w-12 rounded-full mx-auto" />
+          <Skeleton className="h-4 w-3/4 mx-auto" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    const encoded = encodeURIComponent(location);
+    setLocation(`/login?next=${encoded}`);
+    return null;
+  }
+
+  if (user?.role !== "SUPER_ADMIN") {
+    setLocation("/dashboard");
     return null;
   }
 
@@ -51,7 +83,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isAuthenticated, isLoading } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   if (isLoading) {
     return (
@@ -130,16 +162,25 @@ function AuthenticatedRoutes() {
         <Route path="/search">
           <AdminRoute component={SearchPage} />
         </Route>
+        <Route path="/admin/employees">
+          <SuperAdminRoute component={EmployeeManagementPage} />
+        </Route>
+        <Route path="/admin/admin/users">
+          <SuperAdminRoute component={UserManagementPage} />
+        </Route>
+        <Route path="/admin/user-management">
+          <SuperAdminRoute component={UserManagementPage} />
+        </Route>
         <Route path="/admin" nest>
           <Switch>
             <Route path="/">
               <AdminRoute component={AdminDashboard} />
             </Route>
             <Route path="/users">
-              <AdminRoute component={UserManagementPage} />
+              <SuperAdminRoute component={UserManagementPage} />
             </Route>
             <Route path="/audit">
-              <AdminRoute component={AuditLogsPage} />
+              <SuperAdminRoute component={AuditLogsPage} />
             </Route>
             <Route path="/activity">
               <AdminRoute component={ActivityTrackingPage} />
@@ -175,13 +216,17 @@ function Router() {
     );
   }
 
-  if (location === "/" && isAuthenticated) {
-    const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "ORG_ADMIN" || user?.role === "MANAGER";
-    return <Redirect to={isAdmin ? "/admin" : "/user"} />;
-  }
+  if (location === "/") {
+    if (isAuthenticated) {
+      if (user?.role === "SUPER_ADMIN") {
+        return <Redirect to="/admin/user-management" />;
+      }
+      const isAdmin = user?.role === "ORG_ADMIN" || user?.role === "MANAGER";
+      return <Redirect to={isAdmin ? "/admin" : "/user"} />;
+    }
 
-  if (location === "/" && !isAuthenticated) {
-    return <Redirect to="/login" />;
+    // Unauthenticated users see the marketing landing page at root
+    return <LandingPage />;
   }
 
   return (

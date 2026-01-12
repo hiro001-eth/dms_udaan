@@ -7,7 +7,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
-import { insertUserSchema, insertFolderSchema, loginSchema } from "@shared/schema";
+import { insertUserSchema, insertFolderSchema, loginSchema, insertDepartmentSchema } from "@shared/schema";
 import { z } from "zod";
 import * as fileProcessor from "./services/fileProcessor";
 
@@ -41,6 +41,57 @@ function generateShareCode(): string {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return code;
+}
+
+const employeeRoleValues = ["ORG_ADMIN", "MANAGER", "STAFF", "VIEWER"] as const;
+const employmentStatusValues = ["ACTIVE", "INACTIVE", "TERMINATED"] as const;
+
+const createEmployeeSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  email: z.string().email("Invalid email address"),
+  phone: z.string().optional(),
+  location: z.string().optional(),
+  departmentId: z.string().optional(),
+  monitorId: z.string().optional(),
+  appointedDate: z.string().optional(),
+  role: z.enum(employeeRoleValues).optional(),
+  employmentStatus: z.enum(employmentStatusValues).optional(),
+});
+
+const updateEmployeeSchema = createEmployeeSchema.partial();
+
+function generateRandomPassword(length = 12): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_-+";
+  const bytes = crypto.randomBytes(length);
+  let password = "";
+  for (let i = 0; i < length; i++) {
+    password += chars[bytes[i] % chars.length];
+  }
+  return password;
+}
+
+async function generateUniqueUsername(firstName: string, lastName: string): Promise<string> {
+  const baseRaw = `${firstName}.${lastName}`
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^a-z0-9.]/g, "");
+  const base = baseRaw || `user${Date.now()}`;
+
+  let candidate = base;
+  let counter = 1;
+  // try a limited number of times to avoid infinite loops
+  while (true) {
+    const existing = await storage.getUserByUsername(candidate);
+    if (!existing) return candidate;
+    candidate = `${base}${counter}`;
+    counter++;
+    if (counter > 1000) {
+      const suffix = crypto.randomBytes(3).toString("hex");
+      candidate = `${base}-${suffix}`;
+    }
+  }
 }
 
 async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
@@ -95,12 +146,14 @@ function superOrOrgAdminMiddleware(req: AuthRequest, res: Response, next: NextFu
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-  const existingUsers = await storage.getAllUsers();
-  if (existingUsers.length === 0) {
-    const defaultUsername = "admin";
-    const defaultPassword = "admin123";
+  const defaultUsername = "admin";
+  const defaultPassword = "admin123";
 
-    const hashedPassword = await bcrypt.hash(defaultPassword, SALT_ROUNDS);
+  const existingAdmin = await storage.getUserByUsername(defaultUsername);
+
+  const hashedPassword = await bcrypt.hash(defaultPassword, SALT_ROUNDS);
+
+  if (!existingAdmin) {
     await storage.createUser({
       username: defaultUsername,
       email: "admin@example.com",
@@ -110,6 +163,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       role: "SUPER_ADMIN",
       isActive: true,
     });
+    console.log("[auth] Created default SUPER_ADMIN user: username=admin, password=admin123");
+  } else {
+    await storage.updateUser(existingAdmin.id, {
+      password: hashedPassword,
+      role: "SUPER_ADMIN",
+      isActive: true,
+    } as any);
+    console.log("[auth] Reset default SUPER_ADMIN user credentials: username=admin, password=admin123");
   }
 
   app.post("/api/auth/register", async (req: Request, res: Response) => {
@@ -152,10 +213,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const user = await storage.getUserByUsername(username);
 
       if (!user || !(await bcrypt.compare(password, user.password))) {
+        console.warn(`[auth] Invalid login attempt for username="${username}"`);
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
       if (!user.isActive) {
+        console.warn(`[auth] Login attempt for deactivated user username="${username}"`);
         return res.status(401).json({ message: "Account is deactivated" });
       }
 
@@ -180,6 +243,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
 
       const { password: _, ...safeUser } = user;
+      console.log(`[auth] Login success for username="${username}", role=${user.role}`);
       res.json({ token, refreshToken, user: safeUser });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -209,7 +273,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ message: "Logged out" });
   });
 
-  app.get("/api/users", authMiddleware, superOrOrgAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.get("/api/users", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     const users = await storage.getAllUsers();
     const safeUsers = users.map(({ password, ...u }) => u);
     res.json(safeUsers);
@@ -260,13 +324,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/users", authMiddleware, superOrOrgAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.post("/api/users", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const data = insertUserSchema.parse(req.body);
-
-      if (req.user?.role === "ORG_ADMIN" && data.role !== "STAFF" && data.role !== "VIEWER") {
-        return res.status(403).json({ message: "Organization Admin can only create STAFF or VIEWER users" });
-      }
 
       const existingEmail = await storage.getUserByEmail(data.email);
       if (existingEmail) {
@@ -299,7 +359,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.patch("/api/users/:id", authMiddleware, superOrOrgAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.patch("/api/users/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const data = req.body;
@@ -327,7 +387,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.delete("/api/users/:id", authMiddleware, superOrOrgAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.delete("/api/users/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     await storage.deleteUser(id);
     await storage.createAuditLog({
@@ -336,6 +396,277 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       entityType: "USER",
       entityId: id,
     });
+    res.status(204).send();
+  });
+
+  app.post("/api/users/:id/force-logout", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+
+    await storage.deleteUserSessions(id);
+    await storage.createAuditLog({
+      userId: req.user!.id,
+      action: "LOGOUT",
+      entityType: "USER",
+      entityId: id,
+      metadata: { forced: true },
+    });
+
+    res.json({ message: "User sessions terminated" });
+  });
+
+  // Departments (EMS)
+  app.get("/api/departments", authMiddleware, superAdminMiddleware, async (_req: AuthRequest, res: Response) => {
+    const departments = await storage.getDepartments();
+    res.json(departments);
+  });
+
+  app.post("/api/departments", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const data = insertDepartmentSchema.parse(req.body);
+      const dept = await storage.createDepartment({
+        ...data,
+        organizationId: req.user!.organizationId,
+      });
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "CREATE_DEPARTMENT",
+        entityType: "DEPARTMENT",
+        entityId: dept.id,
+        metadata: { code: dept.code, name: dept.name },
+      });
+
+      res.status(201).json(dept);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: "Failed to create department" });
+    }
+  });
+
+  app.patch("/api/departments/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const dept = await storage.updateDepartment(id, req.body);
+      if (!dept) {
+        return res.status(404).json({ message: "Department not found" });
+      }
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "UPDATE_DEPARTMENT",
+        entityType: "DEPARTMENT",
+        entityId: id,
+      });
+
+      res.json(dept);
+    } catch (_error) {
+      res.status(500).json({ message: "Failed to update department" });
+    }
+  });
+
+  app.delete("/api/departments/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    await storage.deleteDepartment(id);
+    await storage.createAuditLog({
+      userId: req.user!.id,
+      action: "DELETE_DEPARTMENT",
+      entityType: "DEPARTMENT",
+      entityId: id,
+    });
+    res.status(204).send();
+  });
+
+  // Employees (EMS)
+  app.get("/api/employees", authMiddleware, superAdminMiddleware, async (_req: AuthRequest, res: Response) => {
+    const users = await storage.getAllUsers();
+    const nonSuperUsers = users.filter((u) => u.role !== "SUPER_ADMIN");
+
+    const result = await Promise.all(
+      nonSuperUsers.map(async (user) => {
+        const profile = await storage.getEmployeeProfileByUserId(user.id);
+        let departmentName: string | null = null;
+        if (profile?.departmentId) {
+          const dept = await storage.getDepartment(profile.departmentId);
+          departmentName = dept?.name ?? null;
+        }
+
+        return {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          username: user.username,
+          role: user.role,
+          isActive: user.isActive,
+          employmentStatus: profile?.employmentStatus ?? "ACTIVE",
+          phone: profile?.phone ?? null,
+          location: profile?.location ?? null,
+          departmentId: profile?.departmentId ?? null,
+          departmentName,
+          monitorId: profile?.monitorId ?? null,
+          appointedDate: profile?.appointedDate ?? null,
+          createdAt: profile?.createdAt ?? user.createdAt,
+          updatedAt: profile?.updatedAt ?? user.updatedAt,
+        };
+      }),
+    );
+
+    res.json(result);
+  });
+
+  app.post("/api/employees", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const data = createEmployeeSchema.parse(req.body);
+
+      const existingEmail = await storage.getUserByEmail(data.email);
+      if (existingEmail) {
+        return res.status(409).json({ message: "Email already exists" });
+      }
+
+      const role = data.role ?? "STAFF";
+      const employmentStatus = data.employmentStatus ?? "ACTIVE";
+
+      const username = await generateUniqueUsername(data.firstName, data.lastName);
+      const plainPassword = generateRandomPassword();
+      const hashedPassword = await bcrypt.hash(plainPassword, SALT_ROUNDS);
+
+      const user = await storage.createUser({
+        email: data.email,
+        username,
+        password: hashedPassword,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        role,
+        isActive: employmentStatus !== "TERMINATED",
+        organizationId: req.user!.organizationId,
+      } as any);
+
+      const appointedDate = data.appointedDate ? new Date(data.appointedDate) : undefined;
+
+      const profile = await storage.createEmployeeProfile({
+        userId: user.id,
+        departmentId: data.departmentId,
+        monitorId: data.monitorId,
+        phone: data.phone,
+        location: data.location,
+        appointedDate: appointedDate,
+        employmentStatus,
+      } as any);
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "CREATE_EMPLOYEE",
+        entityType: "EMPLOYEE",
+        entityId: user.id,
+        metadata: {
+          email: user.email,
+          role: user.role,
+          employmentStatus,
+          departmentId: profile.departmentId,
+        },
+      });
+
+      const { password: _pw, ...safeUser } = user as any;
+
+      res.status(201).json({
+        user: safeUser,
+        profile,
+        credentials: {
+          username,
+          password: plainPassword,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: "Failed to create employee" });
+    }
+  });
+
+  app.patch("/api/employees/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const data = updateEmployeeSchema.parse(req.body);
+
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const userUpdate: any = {};
+      if (data.firstName !== undefined) userUpdate.firstName = data.firstName;
+      if (data.lastName !== undefined) userUpdate.lastName = data.lastName;
+      if (data.role !== undefined) userUpdate.role = data.role;
+      if (data.employmentStatus !== undefined) {
+        userUpdate.isActive = data.employmentStatus !== "TERMINATED";
+      }
+
+      const employmentStatus = data.employmentStatus;
+
+      let profile = await storage.getEmployeeProfileByUserId(id);
+      if (!profile) {
+        profile = await storage.createEmployeeProfile({
+          userId: id,
+          departmentId: data.departmentId,
+          monitorId: data.monitorId,
+          phone: data.phone,
+          location: data.location,
+          appointedDate: data.appointedDate ? new Date(data.appointedDate) : undefined,
+          employmentStatus: employmentStatus ?? "ACTIVE",
+        } as any);
+      } else {
+        const profileUpdate: any = {};
+        if (data.departmentId !== undefined) profileUpdate.departmentId = data.departmentId;
+        if (data.monitorId !== undefined) profileUpdate.monitorId = data.monitorId;
+        if (data.phone !== undefined) profileUpdate.phone = data.phone;
+        if (data.location !== undefined) profileUpdate.location = data.location;
+        if (data.appointedDate !== undefined) {
+          profileUpdate.appointedDate = data.appointedDate ? new Date(data.appointedDate) : null;
+        }
+        if (employmentStatus !== undefined) profileUpdate.employmentStatus = employmentStatus;
+        profile = await storage.updateEmployeeProfile(profile.id, profileUpdate) ?? profile;
+      }
+
+      const updatedUser = Object.keys(userUpdate).length
+        ? await storage.updateUser(id, userUpdate)
+        : user;
+
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "UPDATE_EMPLOYEE",
+        entityType: "EMPLOYEE",
+        entityId: id,
+      });
+
+      const { password: _pw, ...safeUser } = updatedUser as any;
+      res.json({ user: safeUser, profile });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: "Failed to update employee" });
+    }
+  });
+
+  app.delete("/api/employees/:id", authMiddleware, superAdminMiddleware, async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+
+    const profile = await storage.getEmployeeProfileByUserId(id);
+    if (profile) {
+      await storage.deleteEmployeeProfile(profile.id);
+    }
+
+    await storage.deleteUser(id);
+    await storage.createAuditLog({
+      userId: req.user!.id,
+      action: "DELETE_EMPLOYEE",
+      entityType: "EMPLOYEE",
+      entityId: id,
+    });
+
     res.status(204).send();
   });
 
