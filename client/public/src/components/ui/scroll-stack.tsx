@@ -45,7 +45,7 @@ const ScrollStack: React.FC<ScrollStackProps> = ({
 
   const ticking = React.useRef(false);
 
-  const cardCount = Math.min(cards.length, 5);
+  const cardCount = Math.min(cards.length, 6);
 
   const cardStyle: React.CSSProperties = {
     height: cardHeight,
@@ -186,7 +186,7 @@ const ScrollStack: React.FC<ScrollStackProps> = ({
             className="relative mx-auto w-full max-w-5xl flex-shrink-0"
             style={{ height: cardHeight }}
           >
-            {cards.slice(0, 5).map((card, index) => {
+            {cards.slice(0, 6).map((card, index) => {
               const cardTransform = getCardTransform(index);
               const backgroundImage =
                 card.backgroundImage ||

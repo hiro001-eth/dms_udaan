@@ -3,10 +3,11 @@ import { motion, useScroll, useTransform, useReducedMotion } from "framer-motion
 import Lenis from "@studio-freight/lenis";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import ScrollStack, { type ScrollStackCard } from "@/components/ui/scroll-stack";
-import { Shield, Search, Users, BarChart3, ArrowRight, CheckCircle2, Lock, FolderOpen, Sparkles } from "lucide-react";
+import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from "@/components/ui/carousel";
+import { Shield, Search, Users, BarChart3, ArrowRight, CheckCircle2, Lock, FolderOpen, Sparkles, Play, Code2, Terminal } from "lucide-react";
 import logoUrl from "@assets/udaan-logo.svg";
 
 const sectionVariants = {
@@ -35,20 +36,32 @@ const scrollStackCards: ScrollStackCard[] = [
   {
     title: "Search that actually finds",
     subtitle:
-      "Search across names and metadata so the right document is always a few keystrokes away.",
+      "Search across names, content, and metadata so the right document is always a few keystrokes away.",
     badge: "Search",
   },
   {
-    title: "See everything, not just files",
+    title: "See everything in one pane",
     subtitle:
-      "Dashboards show document volume, activity, and who's using the system in real time.",
+      "Dashboards show document volume, risk, and usage across teams, locations, and repositories.",
     badge: "Analytics",
   },
   {
-    title: "Built for teams, not individuals",
+    title: "Collaboration with guardrails",
     subtitle:
-      "Onboard teammates with the right permissions on day one and keep everyone in the same workspace.",
+      "Share with internal teams and external partners while policies and roles keep you in control.",
     badge: "Collaboration",
+  },
+  {
+    title: "Compliance built‑in, not bolted on",
+    subtitle:
+      "Every view, download, and share is logged so you can answer any audit question in seconds.",
+    badge: "Compliance",
+  },
+  {
+    title: "Ready for what comes next",
+    subtitle:
+      "Clean structure and APIs make it easy to plug in AI, automation, and future workflows without re‑platforming.",
+    badge: "Future‑ready",
   },
 ];
 
@@ -264,6 +277,15 @@ export default function LandingPage() {
                     <ArrowRight className="ml-1.5 h-4 w-4" />
                   </Button>
                 </Link>
+                <button
+                  onClick={(event) => handleScroll(event, "product-demo")}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+                >
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-900/5 text-slate-700">
+                    <Play className="h-3 w-3" />
+                  </span>
+                  Watch demo
+                </button>
                 <a
                   href="#features"
                   onClick={(event) => handleScroll(event, "features")}
@@ -385,6 +407,54 @@ export default function LandingPage() {
             </motion.div>
           </motion.section>
 
+          <section className="mt-12 border-y border-slate-100 bg-white/80 py-8">
+            <div className="mx-auto flex max-w-6xl flex-col gap-6 px-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-500">
+                  Trusted by modern teams
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">
+                    <CheckCircle2 className="h-3 w-3" /> 99.99% uptime
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-1 text-sky-700">
+                    <Shield className="h-3 w-3" /> Zero‑trust by design
+                  </span>
+                </div>
+              </div>
+              <div className="relative flex w-full overflow-hidden md:max-w-xl">
+                <motion.div
+                  className="flex min-w-full flex-none items-center justify-around gap-8 grayscale"
+                  animate={shouldReduceMotion ? undefined : { x: ["0%", "-50%"] }}
+                  transition={
+                    shouldReduceMotion
+                      ? undefined
+                      : { duration: 20, repeat: Infinity, ease: "linear" }
+                  }
+                >
+                  {["Acme Corp", "Northwind", "Globex", "Inertia Labs", "Vertex"].map((name) => (
+                    <div
+                      key={name}
+                      className="flex items-center gap-2 text-xs font-semibold text-slate-500"
+                    >
+                      <div className="h-7 w-7 rounded-full bg-slate-100" />
+                      <span>{name}</span>
+                    </div>
+                  ))}
+                  {["Acme Corp", "Northwind", "Globex", "Inertia Labs", "Vertex"].map((name) => (
+                    <div
+                      key={`${name}-clone`}
+                      className="flex items-center gap-2 text-xs font-semibold text-slate-500"
+                    >
+                      <div className="h-7 w-7 rounded-full bg-slate-100" />
+                      <span>{name}</span>
+                    </div>
+                  ))}
+                </motion.div>
+              </div>
+            </div>
+          </section>
+
           <ScrollStack cards={scrollStackCards} backgroundColor="bg-white" />
 
           {/* features */}
@@ -438,13 +508,85 @@ export default function LandingPage() {
                 title="See everything, not just files"
                 description="Dashboards show document volume, activity, and who's using the system in real time."
               />
-              <FeatureCard
-                icon={Users}
-                title="Built for teams, not individuals"
-                description="Onboard teammates with the right permissions on day one and keep everyone in the same workspace."
-              />
             </div>
           </motion.section>
+
+          <section
+            id="product-demo"
+            className="mt-20 space-y-6 rounded-3xl border border-slate-100 bg-slate-900 px-6 py-8 text-slate-50 shadow-[0_24px_80px_rgba(15,23,42,0.5)] md:px-8"
+          >
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold tracking-tight text-slate-50 sm:text-3xl">
+                  See UDAAN in action.
+                </h2>
+                <p className="mt-2 max-w-xl text-sm text-slate-300">
+                  A live dashboard view of how teams discover, secure, and govern documents in real time.
+                </p>
+              </div>
+              <button
+                onClick={(event) => handleScroll(event as any, "cta")}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-medium text-slate-100 shadow-sm transition hover:bg-slate-700"
+              >
+                Explore pricing
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <Carousel className="relative mt-4">
+              <CarouselContent>
+                <CarouselItem className="md:basis-1/2 lg:basis-1/3">
+                  <Card className="h-full border-slate-800 bg-slate-900/60">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-slate-50">
+                        <BarChart3 className="h-4 w-4 text-sky-400" />
+                        Live adoption
+                      </CardTitle>
+                      <CardDescription className="text-slate-400">
+                        Track active users, uploads, and access in real time.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-32 rounded-xl bg-gradient-to-tr from-sky-500/20 via-sky-400/10 to-transparent" />
+                    </CardContent>
+                  </Card>
+                </CarouselItem>
+                <CarouselItem className="md:basis-1/2 lg:basis-1/3">
+                  <Card className="h-full border-slate-800 bg-slate-900/60">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-slate-50">
+                        <Shield className="h-4 w-4 text-emerald-400" />
+                        Risk heatmap
+                      </CardTitle>
+                      <CardDescription className="text-slate-400">
+                        Instantly see where access or activity spikes.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-32 rounded-xl bg-gradient-to-br from-emerald-500/20 via-emerald-400/10 to-transparent" />
+                    </CardContent>
+                  </Card>
+                </CarouselItem>
+                <CarouselItem className="md:basis-1/2 lg:basis-1/3">
+                  <Card className="h-full border-slate-800 bg-slate-900/60">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-slate-50">
+                        <Search className="h-4 w-4 text-sky-400" />
+                        Search analytics
+                      </CardTitle>
+                      <CardDescription className="text-slate-400">
+                        Understand what teams look for and where gaps exist.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-32 rounded-xl bg-gradient-to-br from-sky-500/20 via-sky-400/10 to-transparent" />
+                    </CardContent>
+                  </Card>
+                </CarouselItem>
+              </CarouselContent>
+              <CarouselPrevious className="border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800" />
+              <CarouselNext className="border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800" />
+            </Carousel>
+          </section>
 
           {/* how it works */}
           <motion.section
@@ -534,6 +676,160 @@ export default function LandingPage() {
               />
             </div>
           </motion.section>
+
+          <section
+            id="technical"
+            className="mt-20 grid gap-8 rounded-3xl border border-slate-100 bg-white/90 p-6 shadow-[0_18px_60px_rgba(15,23,42,0.08)] backdrop-blur md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] md:p-8"
+          >
+            <div>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+                Built for B2B and developers.
+              </h2>
+              <p className="mt-2 max-w-xl text-sm text-slate-600">
+                Clean APIs, rich metadata, and audit-grade events so you can automate everything around your documents – provisioning, workflows, risk, and reporting.
+              </p>
+              <div className="mt-6 space-y-3 text-sm text-slate-700">
+                <div className="flex items-center gap-2">
+                  <Code2 className="h-4 w-4 text-sky-500" />
+                  <span>REST APIs for documents, permissions, and audit logs.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Terminal className="h-4 w-4 text-sky-500" />
+                  <span>Webhooks for every important document event.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-sky-500" />
+                  <span>Enterprise SSO, SCIM, and role templates.</span>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-4 text-xs text-slate-100">
+              <Card className="border-slate-900/70 bg-slate-950 text-slate-50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-sm text-slate-50">
+                    <Terminal className="h-4 w-4 text-sky-400" />
+                    API quickstart
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <pre className="overflow-x-auto rounded-xl bg-slate-900 p-4 text-[11px] leading-relaxed text-slate-100">
+{`curl -X POST https://api.udaan-dms.com/v1/documents \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "name": "VendorContract.pdf",
+    "tags": ["legal", "vendor", "2025"],
+    "folderId": "finance/contracts"
+  }'`}
+                  </pre>
+                </CardContent>
+              </Card>
+            </div>
+          </section>
+
+          <section
+            id="pricing"
+            className="mt-20 space-y-8 rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-slate-50 p-6 shadow-[0_18px_60px_rgba(15,23,42,0.08)] md:p-8"
+          >
+            <div className="flex flex-col gap-3 text-center md:text-left">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-sky-600">
+                Pricing
+              </p>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+                Start fast. Scale with confidence.
+              </h2>
+              <p className="mx-auto max-w-2xl text-sm text-slate-600 md:mx-0">
+                Flexible plans for startups, mid-market, and enterprises. No lock-in, no hidden fees – just predictable, scalable document operations.
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card className="border-slate-100 bg-white">
+                <CardContent className="space-y-4 p-5 pt-6">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Growth</p>
+                    <p className="text-2xl font-bold text-slate-900">
+                      $49
+                      <span className="text-xs font-normal text-slate-500"> /admin/month</span>
+                    </p>
+                  </div>
+                  <ul className="space-y-1.5 text-xs text-slate-600">
+                    <li className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Up to 100 team members
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Core document controls
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Standard audit history
+                    </li>
+                  </ul>
+                  <Button className="mt-2 w-full rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-800 hover:border-sky-200 hover:bg-sky-50">
+                    Start Growth
+                  </Button>
+                </CardContent>
+              </Card>
+              <Card className="relative border-sky-300 bg-white shadow-lg shadow-sky-200/70">
+                <CardContent className="space-y-4 p-5 pt-6">
+                  <div className="absolute right-4 top-4 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+                    Most popular
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Scale</p>
+                    <p className="text-2xl font-bold text-slate-900">
+                      $129
+                      <span className="text-xs font-normal text-slate-500"> /admin/month</span>
+                    </p>
+                  </div>
+                  <ul className="space-y-1.5 text-xs text-slate-600">
+                    <li className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Unlimited internal users
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Advanced permissions & roles
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Real-time dashboards & alerts
+                    </li>
+                  </ul>
+                  <Button className="mt-2 w-full rounded-full bg-gradient-to-r from-sky-500 to-blue-600 text-xs font-semibold text-white">
+                    Start Scale
+                  </Button>
+                </CardContent>
+              </Card>
+              <Card className="border-slate-100 bg-white">
+                <CardContent className="space-y-4 p-5 pt-6">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Enterprise</p>
+                    <p className="text-2xl font-bold text-slate-900">Talk to us</p>
+                  </div>
+                  <ul className="space-y-1.5 text-xs text-slate-600">
+                    <li className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Custom SLAs & onboarding
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Private cloud / region control
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Dedicated security review
+                    </li>
+                  </ul>
+                  <Button className="mt-2 w-full rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-800 hover:border-sky-200 hover:bg-sky-50">
+                    Contact sales
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-xs text-slate-500 md:justify-between">
+              <p>No credit card required for trial – SOC2-aligned architecture – SSO available</p>
+              <button
+                onClick={(event) => handleScroll(event as any, "hero")}
+                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                Back to top
+                <ArrowRight className="h-3 w-3 rotate-180" />
+              </button>
+            </div>
+          </section>
 
           {/* final CTA */}
           <motion.section
